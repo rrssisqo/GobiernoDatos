@@ -4,13 +4,13 @@
     ViewData["Title"] = "Auditoría";
     ViewData["Nav"] = "auditoria";
     var c = Model.Conteo;
-    string ClaseDecision(Decision? d) => d switch { Decision.CONTINUA => "badge-ok", Decision.BAJA => "badge-error", _ => "badge-neutro" };
+    var todos = Model.Evento == 0;
 }
 
 <header class="encabezado">
     <div class="titulo">
         <h1>Auditoría</h1>
-        <p>Toda la información de la recertificación: accesos, decisión vigente y ejecución de bajas</p>
+        <p>Accesos de la recertificación con las columnas de la consulta de HANA; OKBAJA y COMENTARIOS son la decisión capturada en el portal</p>
     </div>
     <div class="acciones">
         <a class="btn" id="btn-exportar" asp-page-handler="Exportar" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
@@ -23,8 +23,8 @@
 
 <section class="kpis" aria-label="Indicadores">
     <div class="kpi"><span class="etq">Accesos</span><span class="valor">@c.Accesos.ToString("N0")</span><span class="nota">con los filtros aplicados</span></div>
-    <div class="kpi"><span class="etq">Continúa</span><span class="valor">@c.Continua.ToString("N0")</span></div>
-    <div class="kpi"><span class="etq">Baja</span><span class="valor">@c.Baja.ToString("N0")</span></div>
+    <div class="kpi"><span class="etq">OK</span><span class="valor">@c.Continua.ToString("N0")</span></div>
+    <div class="kpi"><span class="etq">BAJA</span><span class="valor">@c.Baja.ToString("N0")</span></div>
     <div class="kpi"><span class="etq">Pendientes</span><span class="valor">@c.Pendientes.ToString("N0")</span><span class="nota">@Ui.Pct(c.Avance * 100) decidido</span></div>
 </section>
 
@@ -39,22 +39,22 @@
                 }
             </select>
         </label>
-        <label class="campo">Macro área
+        <label class="campo">AREARESPONSABLE
             <select name="macro" data-autosubmit>
                 <option value="">Todas</option>
                 @foreach (var m in Model.MacroAreas) { <option value="@m" selected="@(m == Model.Macro)">@m</option> }
             </select>
         </label>
-        <label class="campo">Decisión
+        <label class="campo">OKBAJA
             <select name="decision" data-autosubmit>
                 <option value="">Todas</option>
                 <option value="PENDIENTE" selected="@(Model.Decision == "PENDIENTE")">Pendiente</option>
-                <option value="CONTINUA" selected="@(Model.Decision == "CONTINUA")">Continúa</option>
-                <option value="BAJA" selected="@(Model.Decision == "BAJA")">Baja</option>
+                <option value="CONTINUA" selected="@(Model.Decision == "CONTINUA")">OK</option>
+                <option value="BAJA" selected="@(Model.Decision == "BAJA")">BAJA</option>
             </select>
         </label>
         <label class="campo" style="flex:2 1 240px">Buscar
-            <input type="search" name="q" value="@Model.Q" placeholder="Usuario, nombre, rol, vista, ticket…" />
+            <input type="search" name="q" value="@Model.Q" placeholder="Usuario, nombre, rol, vista, gobierno…" />
         </label>
         <button type="submit" class="btn" style="flex:0 0 auto">Filtrar</button>
     </form>
@@ -69,29 +69,31 @@
             <table class="tabla tabla-auditoria" id="tabla-auditoria">
                 <thead>
                     <tr>
-                        @if (Model.Evento == 0) { <th>Evento</th> }
-                        <th>Macro área</th><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Vista</th><th class="derecha">Accesos 3m</th>
-                        <th>Decisión</th><th>Comentario</th><th>Decidió</th><th>Fecha decisión</th><th>Ticket</th><th>Fecha ejecución</th><th>Ejecutó</th>
+                        @if (todos) { <th>EVENTO</th> }
+                        @foreach (var col in GobiernoDatos.Web.Pages.Auditoria.IndexModel.ColumnasHana)
+                        {
+                            <th class="@(col == "ACCESOS" ? "derecha" : null)">@col</th>
+                        }
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var f in Model.PaginaActual)
                     {
+                        var v = GobiernoDatos.Web.Pages.Auditoria.IndexModel.Valores(f);
                         <tr>
-                            @if (Model.Evento == 0) { <td>@f.Evento</td> }
-                            <td>@f.MacroArea</td>
-                            <td class="mono">@f.Usuario</td>
-                            <td>@f.NombreUsuario</td>
-                            <td class="mono">@f.Rol</td>
-                            <td class="mono">@f.Vista</td>
-                            <td class="num">@f.Accesos3m</td>
-                            <td><span class="badge @ClaseDecision(f.Decision)">@GobiernoDatos.Web.Pages.Auditoria.IndexModel.EtiquetaDecision(f.Decision)</span></td>
-                            <td>@Ui.Texto(f.Comentario, "—")</td>
-                            <td>@Ui.Texto(f.DecididoPor, "—")</td>
-                            <td class="mono">@(f.FechaDecision?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
-                            <td class="mono">@Ui.Texto(f.Ticket, "—")</td>
-                            <td class="mono">@(f.FechaEjecucion?.ToString("yyyy-MM-dd") ?? "—")</td>
-                            <td>@Ui.Texto(f.EjecutadoPor, "—")</td>
+                            @if (todos) { <td>@f.Evento</td> }
+                            <td>@v[0]</td>
+                            <td>@v[1]</td>
+                            <td class="mono">@v[2]</td>
+                            <td class="mono">@v[3]</td>
+                            <td class="mono">@v[4]</td>
+                            <td>@v[5]</td>
+                            <td>@v[6]</td>
+                            <td>@v[7]</td>
+                            <td>@v[8]</td>
+                            <td>@if (v[9] is string ok) { <span class="badge @(ok == "OK" ? "badge-ok" : "badge-error")">@ok</span> }</td>
+                            <td class="comentario">@v[10]</td>
+                            <td class="num">@v[11]</td>
                         </tr>
                     }
                 </tbody>

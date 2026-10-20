@@ -33,6 +33,7 @@ public sealed class BaseSqlPrueba : IDisposable
         foreach (var script in new[] { "db/gobierno_datos_ddl_v2.sql", "db/seeds/001_muestras_v2.sql", "db/migrations/001_v3_recertificacion.sql",
                                         "db/migrations/002_portal.sql", "db/migrations/003_responsable_usuario_red.sql",
                                         "db/migrations/004_tarea_vista.sql", "db/migrations/005_avance_vista_captura_libre.sql", "db/migrations/006_calidad_marca_de_carga.sql", "db/migrations/007_avance_reportado_dp.sql",
+                                        "db/migrations/008_auditoria_columnas_hana.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -365,7 +366,8 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.NotEmpty(todas);
         var evento = todas[0].EventoId;
         Assert.All(recert.Auditoria(evento), f => Assert.Equal(evento, f.EventoId));
-        Assert.All(todas, f => Assert.False(string.IsNullOrEmpty(f.MacroArea)));
+        Assert.All(todas, f => Assert.False(string.IsNullOrEmpty(f.AreaResponsable)));
+        Assert.Contains(todas, f => f.Area is not null && f.Content is not null);
     }
 
     [SkippableFact]

@@ -114,7 +114,7 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 | `/Recertificacion/Eventos` | Eventos | Carga del extracto → validación → abrir → cerrar, avance por macro área, historial |
 | `/Recertificacion/Mi` | Mi recertificación | Accesos de las macro áreas del certificador, Continúa/Baja al momento, comentario obligatorio en Baja, acción masiva, confirmación |
 | `/Recertificacion/Bajas` | Bajas y evidencia | Registrar ejecución con ticket, traza de auditoría, exportar evidencia CSV |
-| `/Auditoria` | Auditoría | Solo administradores. Todos los accesos de recertificación (un evento o todos) con decisión vigente y ejecución de la baja; filtros por macro área, decisión y texto; paginado de 100; exportar a Excel (.xlsx, respeta los filtros) y exportar por macro área (.zip con un .xlsx por macro área, `Data/EscritorExcel.cs`) |
+| `/Auditoria` | Auditoría | Solo administradores. Accesos de recertificación (un evento o todos) con las columnas de la consulta HANA en su orden (AREA, CONTENT, ROL, VISTA, USUARIO, NAME, GOBIERNO, AREARESPONSABLE, RESPONSABLE, OKBAJA, COMENTARIOS, ACCESOS); OKBAJA/COMENTARIOS = decisión (OK/BAJA) y comentario del portal; GOBIERNO y RESPONSABLE por acceso desde la migración 008 (vacíos en eventos cargados antes); filtros por área responsable, OKBAJA y texto; paginado de 100; exportar a Excel (.xlsx, respeta los filtros) y exportar por macro área (.zip con un .xlsx por macro área, `Data/EscritorExcel.cs`) |
 
 ## Reglas implementadas (con prueba)
 

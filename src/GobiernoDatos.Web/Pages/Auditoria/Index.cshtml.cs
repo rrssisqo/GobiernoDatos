@@ -7,8 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace GobiernoDatos.Web.Pages.Auditoria;
 
-// Auditoría de la recertificación: todos los accesos con su decisión vigente y la ejecución de las bajas.
-// Filtros por evento (0 = todos), macro área, decisión y texto; exportación a Excel completa o un archivo por macro área.
+// Auditoría de la recertificación con las columnas de la consulta HANA (CONT_TI_RECERTIFICACION), en su orden;
+// OKBAJA y COMENTARIOS = decisión y comentario capturados en el portal.
+// Filtros por evento (0 = todos), área responsable (macro área), OKBAJA y texto; exportación a Excel completa o un archivo por macro área.
 public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) : PortalPageModel
 {
     public const int TamanoPagina = 100;
@@ -31,7 +32,7 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
         var todas = Cargar();
         Filas = Filtrar(todas, Macro);
-        Conteo = new(Filas.Count, Filas.Count(f => f.Decision == Domain.Decision.CONTINUA), Filas.Count(f => f.Decision == Domain.Decision.BAJA));
+        Conteo = new(Filas.Count, Filas.Count(f => f.OkBaja == Domain.Decision.CONTINUA), Filas.Count(f => f.OkBaja == Domain.Decision.BAJA));
         Pagina = Math.Clamp(Pagina, 1, Paginas);
         PaginaActual = Filas.Skip((Pagina - 1) * TamanoPagina).Take(TamanoPagina).ToList();
         return Page();
@@ -53,7 +54,7 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            foreach (var g in filas.GroupBy(f => f.MacroArea).OrderBy(g => g.Key))
+            foreach (var g in filas.GroupBy(f => f.AreaResponsable).OrderBy(g => g.Key))
             {
                 var entrada = zip.CreateEntry($"auditoria_{EscritorExcel.NombreArchivo(g.Key)}.xlsx", CompressionLevel.Fastest);
                 using var destino = entrada.Open();
@@ -65,16 +66,18 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
 
     private const string TipoXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    private static byte[] Libro(string hoja, IEnumerable<FilaAuditoria> filas) => EscritorExcel.Libro(hoja,
-        ["Evento", "Estatus evento", "Macro área", "Usuario", "Nombre", "Rol", "Vista", "Accesos 3 meses", "Decisión", "Comentario",
-         "Decidió", "Fecha decisión", "Ticket", "Fecha ejecución", "Ejecutó"],
-        filas.Select(f => new object?[]
-        {
-            f.Evento, ReglasRecertificacion.Etiqueta(f.EstatusEvento), f.MacroArea, f.Usuario, f.NombreUsuario, f.Rol, f.Vista, f.Accesos3m,
-            EtiquetaDecision(f.Decision), f.Comentario, f.DecididoPor, f.FechaDecision, f.Ticket, f.FechaEjecucion, f.EjecutadoPor,
-        }));
+    // Mismas columnas y orden que la consulta HANA.
+    public static readonly string[] ColumnasHana =
+        ["AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "AREARESPONSABLE", "RESPONSABLE", "OKBAJA", "COMENTARIOS", "ACCESOS"];
 
-    public static string EtiquetaDecision(Decision? d) => d is { } x ? ReglasRecertificacion.Etiqueta(x) : "Pendiente";
+    public static object?[] Valores(FilaAuditoria f) =>
+        [f.Area, f.Content, f.Rol, f.Vista, f.Usuario, f.Name, f.Gobierno, f.AreaResponsable, f.Responsable, OkBaja(f.OkBaja), f.Comentarios, f.Accesos];
+
+    private static byte[] Libro(string hoja, IEnumerable<FilaAuditoria> filas) =>
+        EscritorExcel.Libro(hoja, ColumnasHana, filas.Select(Valores));
+
+    // Valores de la columna OKBAJA: OK (continúa) o BAJA; vacío mientras no hay decisión.
+    public static string? OkBaja(Decision? d) => d switch { Domain.Decision.CONTINUA => "OK", Domain.Decision.BAJA => "BAJA", _ => null };
 
     // Sin evento en la URL: el evento activo; 0 = todos los eventos.
     private IReadOnlyList<FilaAuditoria> Cargar()
@@ -82,7 +85,7 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
         Eventos = recert.Historial();
         Evento ??= recert.EventoActivo()?.EventoId ?? 0;
         var filas = recert.Auditoria(Evento == 0 ? null : Evento);
-        MacroAreas = filas.Select(f => f.MacroArea).Distinct().Order().ToList();
+        MacroAreas = filas.Select(f => f.AreaResponsable).Distinct().Order().ToList();
         return filas;
     }
 
@@ -90,15 +93,15 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
     {
         var q = Q?.Trim();
         return filas.Where(f =>
-                (macro is null || f.MacroArea == macro) &&
+                (macro is null || f.AreaResponsable == macro) &&
                 (Decision switch
                 {
-                    "PENDIENTE" => f.Decision is null,
-                    "CONTINUA" => f.Decision == Domain.Decision.CONTINUA,
-                    "BAJA" => f.Decision == Domain.Decision.BAJA,
+                    "PENDIENTE" => f.OkBaja is null,
+                    "CONTINUA" => f.OkBaja == Domain.Decision.CONTINUA,
+                    "BAJA" => f.OkBaja == Domain.Decision.BAJA,
                     _ => true,
                 }) &&
-                (string.IsNullOrEmpty(q) || new[] { f.Usuario, f.NombreUsuario, f.Rol, f.Vista, f.DecididoPor, f.Comentario, f.Ticket }
+                (string.IsNullOrEmpty(q) || new[] { f.Area, f.Content, f.Rol, f.Vista, f.Usuario, f.Name, f.Gobierno, f.Responsable, f.Comentarios }
                     .Any(t => t?.Contains(q, StringComparison.OrdinalIgnoreCase) == true)))
             .ToList();
     }

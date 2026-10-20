@@ -206,6 +206,11 @@ public sealed class RecertAcceso
     public int VistaId { get; init; }
     public int MacroAreaId { get; init; }
     public int Accesos3m { get; init; }
+    // Tal como llegaron en el extracto (columnas de la consulta HANA).
+    public string? Area { get; init; }
+    public string? Content { get; init; }
+    public string? Gobierno { get; init; }
+    public string? Responsable { get; init; }
 }
 
 public sealed class RecertDecision

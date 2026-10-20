@@ -5,11 +5,12 @@ namespace GobiernoDatos.Web.Data;
 
 // Carga del extracto de la vista HANA de Recertificación a un evento (espejo de sp_cargar_extracto_recertificacion, v3):
 // staging → validación → usuarios/roles/vistas → recert_acceso + vista_uso, y sincronización del inventario de vistas.
-// La columna GOBIERNO del extracto se omite. "Área Responsable" = macro área; "Responsable" = certificador.
+// "Área Responsable" = macro área; "Responsable" = certificador. AREA, CONTENT, GOBIERNO y Responsable se guardan
+// además en cada acceso tal como llegaron (Auditoría, migración 008).
 public static class CargaExtracto
 {
     private sealed record Fila(int Num, string Usuario, string Nombre, string Rol, string Vista,
-                               int Accesos, string MacroArea, string? Responsable, string? Area, string? Content);
+                               int Accesos, string MacroArea, string? Responsable, string? Area, string? Content, string? Gobierno);
 
     public static void Cargar(GobiernoStore s, RecertEvento evento, IReadOnlyList<Dictionary<string, string>> filas)
     {
@@ -37,7 +38,7 @@ public static class CargaExtracto
             validas.Add(new(i + 2, usuario, f.GetValueOrDefault("NOMBRE", usuario), rol.ToUpperInvariant(),
                 RutaTecnica.Normalizar(vista), int.Parse(accesosTxt.Replace(",", ""), CultureInfo.InvariantCulture),
                 macro, NullSiVacio(f.GetValueOrDefault("Responsable")), NullSiVacio(f.GetValueOrDefault("AREA")),
-                NullSiVacio(f.GetValueOrDefault("CONTENT"))));
+                NullSiVacio(f.GetValueOrDefault("CONTENT")), NullSiVacio(f.GetValueOrDefault("GOBIERNO"))));
         }
 
         // 1 rol = 1 vista, dentro del extracto y contra lo ya registrado.
@@ -113,6 +114,7 @@ public static class CargaExtracto
             {
                 AccesoId = s.NuevoId(), EventoId = evento.EventoId, UsuarioCodigo = f.Usuario, Rol = f.Rol,
                 VistaId = vista.VistaId, MacroAreaId = macro.MacroAreaId, Accesos3m = f.Accesos,
+                Area = f.Area, Content = f.Content, Gobierno = f.Gobierno, Responsable = f.Responsable,
             });
         }
 

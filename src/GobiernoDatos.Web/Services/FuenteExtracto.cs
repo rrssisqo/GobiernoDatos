@@ -6,7 +6,7 @@ namespace GobiernoDatos.Web.Services;
 
 // Origen del extracto de recertificación para el botón "Actualizar" de Eventos.
 // Devuelve filas con las columnas del extracto que entiende la carga (las mismas del CSV):
-//   AREA, CONTENT, USUARIO, NOMBRE, ROL, VISTA, ACCESO ULTIMOS 3 MESES, Área Responsable, Responsable.
+//   AREA, CONTENT, USUARIO, NOMBRE, ROL, VISTA, ACCESO ULTIMOS 3 MESES, GOBIERNO, Área Responsable, Responsable.
 public interface IFuenteExtracto
 {
     string Descripcion { get; }
@@ -18,7 +18,7 @@ public interface IFuenteExtracto
 // El servidor que ejecuta el portal necesita el DSN de sistema de 64 bits con el driver HDBODBC.
 public sealed class ExtractoHana(IConfiguration configuracion, ILogger<ExtractoHana> log) : IFuenteExtracto
 {
-    // GOBIERNO, OKBAJA y COMENTARIOS se agrupan pero no se cargan (se omiten / se capturan en el portal).
+    // OKBAJA y COMENTARIOS llegan vacíos: la decisión y el comentario se capturan en el portal.
     internal const string Consulta = """
         SELECT
             "AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "AREARESPONSABLE", "RESPONSABLE",
@@ -53,7 +53,7 @@ public sealed class ExtractoHana(IConfiguration configuracion, ILogger<ExtractoH
                 filas.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["AREA"] = Texto("AREA"), ["CONTENT"] = Texto("CONTENT"), ["USUARIO"] = Texto("USUARIO"), ["NOMBRE"] = Texto("NAME"),
-                    ["ROL"] = Texto("ROL"), ["VISTA"] = Texto("VISTA"),
+                    ["ROL"] = Texto("ROL"), ["VISTA"] = Texto("VISTA"), ["GOBIERNO"] = Texto("GOBIERNO"),
                     ["ACCESO ULTIMOS 3 MESES"] = accesos == "" ? "0" : accesos,   // sin accesos en el periodo = 0
                     ["Área Responsable"] = Texto("AREARESPONSABLE"), ["Responsable"] = Texto("RESPONSABLE"),
                 });

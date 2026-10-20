@@ -31,11 +31,12 @@ public sealed record FilaBaja(long AccesoId, string UsuarioCodigo, string Usuari
 
 public sealed record TableroBajas(RecertEvento Evento, IReadOnlyList<FilaBaja> Filas, int Decididas, int Ejecutadas, decimal? DiasPromedio);
 
-// Auditoría: un renglón por acceso, con la decisión vigente y la ejecución de la baja (gd.vw_recert_evidencia).
-public sealed record FilaAuditoria(long AccesoId, int EventoId, string Evento, EstatusEvento EstatusEvento, string MacroArea,
-                                   string Usuario, string NombreUsuario, string Rol, string Vista, int Accesos3m,
-                                   Decision? Decision, string? Comentario, string? DecididoPor, DateTime? FechaDecision,
-                                   string? Ticket, DateOnly? FechaEjecucion, string? EjecutadoPor);
+// Auditoría: un renglón por acceso con las columnas de la consulta HANA (CONT_TI_RECERTIFICACION), en su orden.
+// AreaResponsable = macro área; OKBAJA y COMENTARIOS = decisión vigente y comentario capturados en el portal.
+public sealed record FilaAuditoria(long AccesoId, int EventoId, string Evento,
+                                   string? Area, string? Content, string Rol, string Vista, string Usuario, string Name,
+                                   string? Gobierno, string AreaResponsable, string? Responsable,
+                                   Decision? OkBaja, string? Comentarios, int Accesos);
 
 public sealed record PasoTraza(DateTime Fecha, string Titulo, string Detalle);
 
@@ -341,14 +342,14 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             return s.Eventos.Where(e => eventoId is null || e.EventoId == eventoId).SelectMany(e => Vigentes(e.EventoId).Select(x =>
             {
                 var a = x.Acceso;
-                var ej = s.BajasEjecutadas.FirstOrDefault(b => b.AccesoId == a.AccesoId);
-                return new FilaAuditoria(a.AccesoId, e.EventoId, e.Nombre, e.Estatus, s.MacroAreas.First(m => m.MacroAreaId == a.MacroAreaId).Nombre,
-                    a.UsuarioCodigo, s.UsuariosHana.First(u => u.Codigo == a.UsuarioCodigo).Nombre, a.Rol,
-                    s.Vistas.First(v => v.VistaId == a.VistaId).RutaTecnica, a.Accesos3m,
-                    x.Decision?.Decision, x.Decision?.Comentario, x.Decision?.DecididoPor, x.Decision?.FechaRegistro,
-                    ej?.Ticket, ej?.FechaEjecucion, ej?.EjecutadoPor);
+                var rol = s.Roles.FirstOrDefault(r => r.Nombre == a.Rol);
+                return new FilaAuditoria(a.AccesoId, e.EventoId, e.Nombre, a.Area ?? rol?.Area, a.Content ?? rol?.Content, a.Rol,
+                    s.Vistas.First(v => v.VistaId == a.VistaId).RutaTecnica, a.UsuarioCodigo,
+                    s.UsuariosHana.First(u => u.Codigo == a.UsuarioCodigo).Nombre, a.Gobierno,
+                    s.MacroAreas.First(m => m.MacroAreaId == a.MacroAreaId).Nombre, a.Responsable,
+                    x.Decision?.Decision, x.Decision?.Comentario, a.Accesos3m);
             }))
-            .OrderByDescending(f => f.EventoId).ThenBy(f => f.MacroArea).ThenBy(f => f.Vista).ThenBy(f => f.Usuario).ToList();
+            .OrderByDescending(f => f.EventoId).ThenBy(f => f.AreaResponsable).ThenBy(f => f.Vista).ThenBy(f => f.Usuario).ToList();
     }
 
     public IReadOnlyList<CertificadoresMacroArea> Certificadores()

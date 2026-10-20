@@ -118,12 +118,13 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             throw new DomainException("El extracto no tiene las columnas de recertificación (USUARIO, ROL, VISTA…).");
 
         var t = new DataTable();
-        foreach (var col in new[] { "area", "content", "usuario", "nombre", "rol", "vista", "accesos_3m", "area_responsable", "responsable" })
+        foreach (var col in new[] { "area", "content", "usuario", "nombre", "rol", "vista", "accesos_3m", "area_responsable", "responsable", "gobierno" })
             t.Columns.Add(col, typeof(string));
         foreach (var f in extracto)
             t.Rows.Add(f.GetValueOrDefault("AREA"), f.GetValueOrDefault("CONTENT"), f.GetValueOrDefault("USUARIO"), f.GetValueOrDefault("NOMBRE"),
                        f.GetValueOrDefault("ROL"), f.GetValueOrDefault("VISTA"), f.GetValueOrDefault("ACCESO ULTIMOS 3 MESES"),
-                       f.GetValueOrDefault("Área Responsable") ?? f.GetValueOrDefault("Area Responsable"), f.GetValueOrDefault("Responsable"));
+                       f.GetValueOrDefault("Área Responsable") ?? f.GetValueOrDefault("Area Responsable"), f.GetValueOrDefault("Responsable"),
+                       f.GetValueOrDefault("GOBIERNO"));
         return t;
     }
 
@@ -363,23 +364,22 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             }));
     }
 
-    private sealed record AuditoriaRow(long acceso_id, int evento_id, string evento, string estatus_evento, string macro_area, string usuario,
-                                       string nombre_usuario, string rol, string vista, int accesos_3m, string decision, string? comentario,
-                                       string? decidido_por, DateTime? fecha_decision, string? ticket, DateTime? fecha_ejecucion, string? ejecutado_por);
+    private sealed record AuditoriaRow(long acceso_id, int evento_id, string evento, string? area, string? content, string rol, string vista,
+                                       string usuario, string nombre_usuario, string? gobierno, string macro_area, string? responsable,
+                                       string decision, string? comentario, int accesos_3m);
 
     public IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId)
     {
         using var c = db.Abrir();
         return c.Query<AuditoriaRow>("""
-            SELECT acceso_id, evento_id, evento, estatus_evento, macro_area, usuario, nombre_usuario, rol, vista, accesos_3m, decision,
-                   comentario, decidido_por, fecha_decision, ticket, fecha_ejecucion, ejecutado_por
+            SELECT acceso_id, evento_id, evento, area, content, rol, vista, usuario, nombre_usuario, gobierno, macro_area, responsable,
+                   decision, comentario, accesos_3m
             FROM gd.vw_recert_evidencia
             WHERE @eventoId IS NULL OR evento_id = @eventoId
             ORDER BY evento_id DESC, macro_area, vista, usuario
             """, new { eventoId })
-            .Select(f => new FilaAuditoria(f.acceso_id, f.evento_id, f.evento, Enum.Parse<EstatusEvento>(f.estatus_evento), f.macro_area,
-                f.usuario, f.nombre_usuario, f.rol, f.vista, f.accesos_3m, Decisión(f.decision), f.comentario, f.decidido_por,
-                f.fecha_decision, f.ticket, D(f.fecha_ejecucion), f.ejecutado_por)).ToList();
+            .Select(f => new FilaAuditoria(f.acceso_id, f.evento_id, f.evento, f.area, f.content, f.rol, f.vista, f.usuario, f.nombre_usuario,
+                f.gobierno, f.macro_area, f.responsable, Decisión(f.decision), f.comentario, f.accesos_3m)).ToList();
     }
 
     // ---- Certificadores ----
