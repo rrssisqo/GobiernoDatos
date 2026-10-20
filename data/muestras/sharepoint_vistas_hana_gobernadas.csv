@@ -1,0 +1,8 @@
+Vista,Responsable,Avance,Linaje,Data Product,Reglas de Calidad,Estatus,Área,Glosarios,Vista Técnica,Nivel de Seguridad,Proceso,SubDominioPadre,ID Regla
+Ordenes Trabajo Mantenimiento,Eli Villalpando,100%,TRUE,,,Completada,Industrial,TRUE,"""_SYS_BIC"".""MABE.INDUSTRIAL.MANTENIMIENTO/IND_CON_MANTENIMIENTO_ORDENES_TRABAJO""",Interno/Confidencial,Gestión de Activos,Gestión de Activos,
+Costo de Nomina,Fernando Sosa,100%,FALSE,FALSE,FALSE,Certificación Glosarios,Nominas,FALSE,"""_SYS_BIC"".""MABE.CSC.NOMINAS.COSTONOMINA/CONT_NOMINAS_COSTONOMINA""",Restringido/Privado,Costo Nomina,Costo Nómina,
+Head Count PBI,Andres Díaz,100%,FALSE,FALSE,FALSE,Reescaneo,RRHH,FALSE,"""_SYS_BIC"".""MABE.RH.COMPENSACIONES.HEADCOUNT/CONT_RH_HEADCOUNT_PBI""",Interno/Confidencial,HeadCount,HeadCount,
+Consolidado Producción por Hora,Eli Villalpando,100%,FALSE,FALSE,FALSE,Escaneo Inicial,Industrial,FALSE,"""_SYS_BIC"".""MABE.INDUSTRIAL.OEE/CONT_IND_OEE_CONSPRODUCCIONXHORA""",Interno/Confidencial,OEE,OEE,
+OEE Paradas,Eli Villalpando,14%,FALSE,FALSE,FALSE,Escaneo Inicial,Industrial,FALSE,"""_SYS_BIC"".""MABE.INDUSTRIAL.OEE/CONT_IND_OEE_PARADAS""",Interno/Confidencial,OEE,OEE,
+Consolidado Tiempos por Hora,Eli Villalpando,100%,FALSE,FALSE,FALSE,Escaneo Inicial,Industrial,FALSE,"""_SYS_BIC"".""MABE.INDUSTRIAL.OEE/CONT_IND_OEE_CONSTIEMPOSXHORA""",Interno/Confidencial,OEE,OEE,
+OEE Producción,Eli Villalpando,100%,FALSE,FALSE,FALSE,Escaneo Inicial,Industrial,FALSE,"""_SYS_BIC"".""MABE.INDUSTRIAL.OEE/CONT_IND_OEE_PRODUCCION""",Interno/Confidencial,OEE,OEE,

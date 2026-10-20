@@ -1,0 +1,122 @@
+@page
+@model GobiernoDatos.Web.Pages.Recertificacion.BajasModel
+@{
+    ViewData["Title"] = "Bajas y evidencia";
+    ViewData["Nav"] = "bajas";
+    var t = Model.Tablero;
+    var sel = Model.Seleccionada;
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Bajas y evidencia</h1>
+        <p>Accesos marcados como Baja: ejecución por TI y evidencia para auditoría</p>
+    </div>
+    @if (t is not null)
+    {
+        <form method="get" class="acciones">
+            <label class="campo">Evento
+                <select name="evento" data-autosubmit>
+                    @foreach (var e in Model.Eventos) { <option value="@e.EventoId" selected="@(e.EventoId == t.Evento.EventoId)">@e.Nombre · @ReglasRecertificacion.Etiqueta(e.Estatus)</option> }
+                </select>
+            </label>
+            <a class="btn" asp-page-handler="Evidencia" asp-route-evento="@t.Evento.EventoId">Exportar evidencia</a>
+        </form>
+    }
+</header>
+
+@if (t is null)
+{
+    <div class="panel"><div class="vacio">No hay eventos de recertificación.</div></div>
+}
+else
+{
+    <section class="kpis" aria-label="Indicadores">
+        <div class="kpi"><span class="etq">Bajas decididas</span><span class="valor">@t.Decididas</span></div>
+        <div class="kpi"><span class="etq">Ejecutadas</span><span class="valor">@t.Ejecutadas</span></div>
+        <div class="kpi"><span class="etq">Pendientes de ejecución</span><span class="valor">@(t.Decididas - t.Ejecutadas)</span></div>
+        <div class="kpi"><span class="etq">Días promedio para ejecutar</span><span class="valor">@(t.DiasPromedio is null ? "—" : t.DiasPromedio.Value.ToString("0.#"))</span></div>
+    </section>
+
+    <div class="dos-columnas">
+        <section class="panel" aria-labelledby="h-b">
+            <div class="panel-cab">
+                <h2 id="h-b">Bajas del evento</h2>
+                <form method="get" class="compacto">
+                    <input type="hidden" name="evento" value="@t.Evento.EventoId" />
+                    <label class="campo en-linea">Estatus
+                        <select name="estatus" data-autosubmit>
+                            <option value="">Todas</option>
+                            <option value="PENDIENTES" selected="@(Model.Estatus == "PENDIENTES")">Pendientes</option>
+                            <option value="EJECUTADAS" selected="@(Model.Estatus == "EJECUTADAS")">Ejecutadas</option>
+                        </select>
+                    </label>
+                </form>
+            </div>
+            @if (Model.Filas.Count == 0)
+            {
+                <div class="vacio">@(t.Decididas == 0 ? "Ningún certificador ha marcado bajas en este evento." : "No hay bajas con este estatus.")</div>
+            }
+            else
+            {
+                <div class="tabla-scroll">
+                    <table class="tabla">
+                        <thead><tr><th class="col-nombre">Usuario</th><th>Vista · rol a retirar</th><th>Macro área</th><th>Decidió</th><th>Comentario</th><th>Ejecución</th></tr></thead>
+                        <tbody>
+                            @foreach (var f in Model.Filas)
+                            {
+                                var url = Url.Page("Bajas", new { evento = t.Evento.EventoId, estatus = Model.Estatus, acceso = f.AccesoId });
+                                <tr class="@(sel?.AccesoId == f.AccesoId ? "seleccionada" : "")">
+                                    <td><a href="@url">@f.UsuarioNombre</a><span class="secundario">@f.UsuarioCodigo</span></td>
+                                    <td class="ruta"><span class="mono" style="font-size:12px">@f.Vista</span><span class="secundario">@f.Rol</span></td>
+                                    <td>@f.MacroArea</td>
+                                    <td>@f.DecididoPor<span class="ayuda" style="display:block">@Ui.FechaHora(f.FechaDecision)</span></td>
+                                    <td>@f.Comentario</td>
+                                    <td>
+                                        @if (f.Ejecucion is not null)
+                                        {
+                                            <span class="badge badge-ok">Ejecutada · @Ui.Fecha(f.Ejecucion.FechaEjecucion)</span>
+                                            <span class="secundario">Ticket @f.Ejecucion.Ticket</span>
+                                        }
+                                        else
+                                        {
+                                            <form method="post" asp-page-handler="Ejecutar" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" class="form-fila compacto" style="min-width:260px">
+                                                <input type="hidden" name="accesoId" value="@f.AccesoId" />
+                                                <input type="text" name="ticket" aria-label="Ticket" placeholder="Ticket" required maxlength="60" style="flex:1 1 100px" />
+                                                <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Registrar ejecución</button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <aside class="panel lateral" aria-labelledby="h-tr">
+            <div class="panel-cab"><h2 id="h-tr">Traza de auditoría</h2></div>
+            <div class="panel-cuerpo">
+                @if (sel is null)
+                {
+                    <p class="sutil">Selecciona una baja para ver su traza.</p>
+                }
+                else
+                {
+                    <span class="sutil">Acceso seleccionado: @sel.UsuarioNombre · @RutaTecnica.Vista(sel.Vista)</span>
+                    <div class="traza">
+                        @foreach (var p in Model.Traza)
+                        {
+                            <div class="paso"><span class="punto"></span><div><span>@p.Titulo</span><span class="det">@p.Detalle · @Ui.FechaHora(p.Fecha)</span></div></div>
+                        }
+                        @if (sel.Ejecucion is null)
+                        {
+                            <div class="paso"><span class="punto" style="background:var(--control)"></span><div><span class="sutil">Rol pendiente de retirar</span></div></div>
+                        }
+                    </div>
+                }
+            </div>
+        </aside>
+    </div>
+}

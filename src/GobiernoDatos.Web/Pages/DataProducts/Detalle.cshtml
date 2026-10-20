@@ -1,0 +1,306 @@
+@page
+@model GobiernoDatos.Web.Pages.DataProducts.DetalleModel
+@{
+    var d = Model.Detalle;
+    var dp = d.Dp;
+    ViewData["Title"] = dp.Nombre;
+    ViewData["Nav"] = "dp";
+    var abierto = dp.Estatus is "EN_CURSO" or "PLANEADO";
+    var rubrosVista = Catalogos.Rubros.Where(r => r.Nivel == NivelRubro.VISTA).ToList();
+}
+
+<div class="migas"><a asp-page="/Index" asp-route-semana="@d.Semana.Id">Seguimiento semanal</a> / <a asp-page="Index">Data products</a> / @dp.Nombre</div>
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>@dp.Nombre</h1>
+        <div class="meta">
+            <span class="badge">Gobierno: @dp.Gobierno</span>
+            <span class="badge @(abierto ? "badge-ok" : "")">@Ui.EstatusDp(dp.Estatus)</span>
+            @if (d.UsaValoresIniciales && dp.VistasIniciales > 0)
+            {
+                <span class="badge badge-aviso" title="El Excel reporta estas vistas, pero aún no están asignadas en el inventario">@dp.VistasIniciales @(dp.VistasIniciales == 1 ? "vista" : "vistas") según Excel · sin asignar</span>
+            }
+            else
+            {
+                <span class="badge">@(d.Vistas.Count == 1 ? "1 vista" : $"{d.Vistas.Count} vistas")</span>
+            }
+            <span class="badge">Responsable: @Ui.Texto(dp.Responsable, "[responsable]")</span>
+            <span class="badge">Alta: @Ui.Fecha(dp.FechaAlta)</span>
+            @if (dp.FechaCierre is not null) { <span class="badge">Cierre: @Ui.Fecha(dp.FechaCierre)</span> }
+        </div>
+    </div>
+    <div class="acciones">
+        <form method="get">
+            <input type="hidden" name="id" value="@dp.DpId" />
+            <label class="campo">Semana
+                <select name="semana" data-autosubmit>
+                    @foreach (var s in Model.Semanas) { <option value="@s.Id" selected="@(s.Id == d.Semana.Id)">@s.Etiqueta · @s.Rango()</option> }
+                </select>
+            </label>
+        </form>
+        <div class="kpi" style="padding:10px 16px">
+            <span class="etq">Avance semana @d.Semana.Etiqueta</span>
+            <span class="valor" style="font-size:26px">@Ui.Pct(d.Avance)</span>
+        </div>
+        @if (abierto)
+        {
+            <form method="post" asp-page-handler="Cerrar" asp-route-id="@dp.DpId" data-confirmar="¿Cerrar el data product «@dp.Nombre»? Ya no se podrá registrar avance.">
+                <button type="submit" class="btn">Cerrar data product</button>
+            </form>
+        }
+    </div>
+</header>
+
+<div class="dos-columnas">
+    <div class="pila">
+        <section class="panel" aria-labelledby="h-rubros-dp">
+            <div class="panel-cab"><h2 id="h-rubros-dp">Rubros del data product</h2></div>
+            <div class="panel-cuerpo">
+                <div class="rubros-dp">
+                    @foreach (var r in d.RubrosDp)
+                    {
+                        <div class="tarjeta-rubro">
+                            <div class="fila"><span>@r.Rubro.Nombre</span><span class="pct">@Ui.Pct(r.Pct)</span></div>
+                            <div class="barra"><span style="width:@Math.Round(r.Pct)%"></span></div>
+                            <span class="ayuda">@r.Rubro.GrupoResponsable · @(r.Estado is null ? "Sin dato" : Avance.Etiqueta(r.Estado.Value))@(r.Fecha is null ? "" : " · " + Ui.Fecha(r.Fecha))</span>
+                            @if (abierto) { <a class="btn btn-chico" asp-route-id="@dp.DpId" asp-route-rubro="@r.Rubro.RubroId" asp-fragment="h-registrar">Actualizar</a> }
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="h-vistas">
+            <div class="panel-cab">
+                <h2 id="h-vistas">Avance por vista</h2>
+                <a class="btn btn-chico" asp-page="/Vistas/Index">Asignar vista</a>
+            </div>
+            @if (d.Vistas.Count == 0)
+            {
+                <div class="panel-cuerpo">
+                    <div class="aviso aviso-info">Este data product aún no tiene vistas asignadas@(d.UsaValoresIniciales ? ". Los rubros de vista muestran el avance reportado en el Excel hasta que se asigne la primera vista." : ": sus rubros de vista cuentan 0% hasta asignarlas desde Vistas gobernadas.")</div>
+                </div>
+            }
+            <div class="tabla-scroll">
+                <table class="tabla">
+                    <thead>
+                        <tr>
+                            <th>Vista HANA</th>
+                            <th>Etapa</th>
+                            @foreach (var r in rubrosVista) { <th class="centro">@r.Corto</th> }
+                            <th class="derecha">Reglas vinculadas</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in d.Vistas)
+                        {
+                            <tr>
+                                <td><a asp-page="/Vistas/Index" asp-route-id="@v.VistaId">@v.Nombre</a><span class="secundario">@v.Ruta</span></td>
+                                <td>@v.Etapa</td>
+                                @foreach (var c in v.Rubros) { <td class="centro"><span class="celda @Ui.ClaseRubro(c.Pct)">@Ui.Pct(c.Pct)</span></td> }
+                                <td class="num">@v.Reglas</td>
+                                <td>
+                                    @if (abierto)
+                                    {
+                                        <a class="btn btn-chico" asp-route-id="@dp.DpId" asp-route-vista="@v.VistaId" asp-fragment="h-registrar">Registrar avance</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        <tr class="total">
+                            <td>Promedio del data product</td>
+                            <td></td>
+                            @foreach (var c in d.PromedioVistas) { <td class="centro mono">@Ui.Pct(c.Pct)</td> }
+                            <td></td><td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="h-bitacora">
+            <div class="panel-cab"><h2 id="h-bitacora">Bitácora semanal</h2></div>
+            <div class="panel-cuerpo">
+                @if (abierto)
+                {
+                    <form method="post" asp-page-handler="Nota" asp-route-id="@dp.DpId" class="form-fila">
+                        <label class="campo" style="flex:4 1 300px">Nota de la semana @Model.SemanaActual.Etiqueta
+                            <input type="text" name="NotaLibre" maxlength="2000" placeholder="Acuerdos y pendientes de la sesión de seguimiento" />
+                        </label>
+                        <button type="submit" class="btn" style="flex:0 0 auto">Agregar nota</button>
+                    </form>
+                }
+                @if (d.Bitacora.Count == 0)
+                {
+                    <div class="vacio">Sin movimientos registrados.</div>
+                }
+                <div class="bitacora">
+                    @foreach (var g in d.Bitacora.GroupBy(b => b.Semana))
+                    {
+                        <div class="semana">
+                            <span class="etq-semana">@g.Key.Etiqueta</span>
+                            <div>
+                                @foreach (var e in g)
+                                {
+                                    <div class="entrada">
+                                        <span>@e.Detalle</span>
+                                        <span class="det">@e.Tipo · @Ui.Fecha(e.Fecha)@(string.IsNullOrEmpty(e.Usuario) ? "" : " · " + e.Usuario)</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <aside class="panel lateral" aria-labelledby="h-registrar">
+        @if (!abierto)
+        {
+            <div class="panel-cuerpo"><h2 id="h-registrar">Registrar avance</h2><p class="sutil">El data product está cerrado.</p></div>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="Avance" asp-route-id="@dp.DpId" class="panel-cuerpo" id="form-avance">
+                <h2 id="h-registrar">Registrar avance</h2>
+                @if (d.Semana.Id != Model.SemanaActual.Id)
+                {
+                    <div class="aviso aviso-aviso">Estás viendo la semana @d.Semana.Etiqueta; el movimiento se registra con fecha de hoy (semana @Model.SemanaActual.Etiqueta).</div>
+                }
+                <fieldset>
+                    <legend>Nivel</legend>
+                    <div class="opciones">
+                        <label><input type="radio" name="Form.Nivel" value="DP" checked="@(Model.Form.Nivel == NivelRubro.DP)" /> Data product</label>
+                        <label><input type="radio" name="Form.Nivel" value="VISTA" checked="@(Model.Form.Nivel == NivelRubro.VISTA)" disabled="@(Model.Actual.Vistas.Count == 0)" /> Vista</label>
+                    </div>
+                </fieldset>
+                <label class="campo">Vista
+                    <select name="Form.VistaId" id="sel-vista">
+                        <option value="">Solo para rubros de vista</option>
+                        @foreach (var v in Model.Actual.Vistas)
+                        {
+                            <option value="@v.VistaId" data-rubro="@v.RubroActivo?.RubroId" data-etapa="@v.Etapa"
+                                    selected="@(Model.Form.VistaId == v.VistaId)">@v.Nombre</option>
+                        }
+                    </select>
+                </label>
+                <label class="campo">Rubro
+                    <select name="Form.RubroId" id="sel-rubro" required>
+                        @foreach (var r in Catalogos.Rubros.OrderBy(r => r.Orden))
+                        {
+                            var actual = Model.Actual.RubrosDp.FirstOrDefault(x => x.Rubro.RubroId == r.RubroId);
+                            <option value="@r.RubroId" data-nivel="@r.Nivel" selected="@(Model.Form.RubroId == r.RubroId)"
+                                    data-pct="@actual?.Pct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)" data-estado="@actual?.Estado"
+                                    data-fecha="@(actual?.Fecha is null ? "" : Ui.Fecha(actual.Fecha))">@r.Nombre</option>
+                        }
+                    </select>
+                    <span class="ayuda oculto" id="ayuda-rubro"></span>
+                    <span class="ayuda" id="valor-actual"></span>
+                </label>
+                <fieldset>
+                    <legend>Estado</legend>
+                    <div class="opciones">
+                        @foreach (var e in Enum.GetValues<EstadoAvance>())
+                        {
+                            <label><input type="radio" name="Form.Estado" value="@e" checked="@(Model.Form.Estado == e)" /> @Avance.Etiqueta(e)</label>
+                        }
+                    </div>
+                </fieldset>
+                <label class="campo">Porcentaje
+                    <input type="number" name="Form.Pct" id="inp-pct" min="1" max="99" step="1" value="@Model.Form.Pct?.ToString("0")" />
+                    <span class="ayuda">Cerrado y No aplica registran 100% automáticamente; No iniciado registra 0%.</span>
+                </label>
+                <label class="campo">Nota para la bitácora
+                    <textarea name="Form.Nota" rows="4" maxlength="1000"></textarea>
+                </label>
+                <div class="form-fila">
+                    <a class="btn" asp-route-id="@dp.DpId">Cancelar</a>
+                    <button type="submit" class="btn btn-primario">Guardar movimiento</button>
+                </div>
+                <p class="ayuda">En vistas puedes capturar cualquier rubro. Vale el último evento: tu captura, o el cierre al 100% cuando la vista avanza más allá de las etapas del rubro (Glosario 3–6, Linaje 7–8, Perfilado 10, Reglas 11).</p>
+                <script type="application/json" id="valores-vistas">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                    Model.Actual.Vistas.ToDictionary(v => v.VistaId.ToString(), v => v.Rubros.ToDictionary(c => c.RubroId.ToString(),
+                        c => new { pct = c.Pct, estado = c.Estado?.ToString() }))))</script>
+            </form>
+        }
+    </aside>
+</div>
+
+@section Scripts {
+<script>
+(() => {
+    const form = document.getElementById('form-avance');
+    if (!form) return;
+    const selVista = document.getElementById('sel-vista');
+    const selRubro = document.getElementById('sel-rubro');
+    const ayuda = document.getElementById('ayuda-rubro');
+    const pct = document.getElementById('inp-pct');
+
+    function nivel() { return form.querySelector('input[name="Form.Nivel"]:checked').value; }
+
+    const valoresVistas = JSON.parse(document.getElementById('valores-vistas').textContent);
+
+    function actualizarRubros() {
+        const esVista = nivel() === 'VISTA';
+        selVista.disabled = !esVista;
+        // Con nivel Vista siempre hay una vista elegida (antes la lista de rubros quedaba vacía).
+        if (esVista && !selVista.value && selVista.options.length > 1) selVista.selectedIndex = 1;
+        const opt = selVista.selectedOptions[0];
+        let primero = null;
+        for (const o of selRubro.options) {
+            const visible = o.dataset.nivel === (esVista ? 'VISTA' : 'DP');
+            o.hidden = !visible; o.disabled = !visible;
+            if (visible && !primero) primero = o;
+        }
+        if (selRubro.selectedOptions[0]?.disabled) {
+            // Por omisión, el rubro de la etapa actual de la vista.
+            const activo = esVista && opt?.dataset.rubro ? opt.dataset.rubro : null;
+            selRubro.value = activo ?? (primero ? primero.value : '');
+        }
+        ayuda.classList.add('oculto');
+    }
+
+    const etiquetas = { NO_INICIADO: 'No iniciado', EN_CURSO: 'En curso', CERRADO: 'Cerrado', NO_APLICA: 'No aplica' };
+    const valorActual = document.getElementById('valor-actual');
+
+    // Precarga estado y % con el valor vigente del rubro elegido, para partir de él al registrar el avance.
+    function precargar() {
+        const esVista = nivel() === 'VISTA';
+        const optRubro = selRubro.selectedOptions[0];
+        const optVista = selVista.selectedOptions[0];
+        let pctActual = '', estado = '', fecha = '', nota = '';
+        if (esVista) {
+            const v = valoresVistas[optVista?.value]?.[optRubro?.value];
+            if (v) { pctActual = String(v.pct); estado = v.estado || ''; }
+            if (optVista?.dataset.rubro === optRubro?.value) nota = ' · rubro de la etapa actual';
+        } else if (optRubro) {
+            pctActual = optRubro.dataset.pct; estado = optRubro.dataset.estado || ''; fecha = optRubro.dataset.fecha || '';
+        }
+        const radio = form.querySelector(`input[name="Form.Estado"][value="${estado || 'EN_CURSO'}"]`);
+        if (radio) radio.checked = true;
+        pct.value = estado === 'EN_CURSO' && Number(pctActual) > 0 ? pctActual : '';
+        valorActual.textContent = !optRubro?.value ? ''
+            : estado ? `Valor actual: ${pctActual}% · ${etiquetas[estado]}${fecha ? ' · ' + fecha : ''}${nota}`
+            : `Sin avance registrado para este rubro.${nota}`;
+        actualizarPct();
+    }
+
+    function actualizarPct() {
+        const estado = form.querySelector('input[name="Form.Estado"]:checked').value;
+        pct.disabled = estado !== 'EN_CURSO';
+        pct.required = estado === 'EN_CURSO';
+    }
+
+    form.addEventListener('change', e => {
+        if (e.target.name === 'Form.Nivel' || e.target === selVista) { actualizarRubros(); precargar(); }
+        if (e.target === selRubro) precargar();
+        if (e.target.name === 'Form.Estado') actualizarPct();
+    });
+    if (nivel() === 'VISTA' && !selVista.value && selVista.options.length > 1) selVista.selectedIndex = 1;
+    actualizarRubros(); precargar();
+})();
+</script>
+}

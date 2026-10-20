@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+
+# Publicación local y secretos
+publish/
+*.pubxml.user
+appsettings.*.local.json
+secrets.json
+.vscode/
+

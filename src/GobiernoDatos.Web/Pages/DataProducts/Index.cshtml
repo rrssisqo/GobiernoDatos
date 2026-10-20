@@ -1,0 +1,70 @@
+@page
+@model GobiernoDatos.Web.Pages.DataProducts.IndexModel
+@{
+    ViewData["Title"] = "Data products";
+    ViewData["Nav"] = "dp";
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Data products</h1>
+        <p>Selecciona un data product para registrar su avance de la semana</p>
+    </div>
+</header>
+
+<div class="dos-columnas">
+    <section class="panel" aria-label="Listado de data products">
+        <div class="panel-cab">
+            <h2>Todos los data products</h2>
+            <label class="campo en-linea compacto">Buscar
+                <input type="search" placeholder="Nombre o gobierno" data-filtro-tabla="#tabla-dp" style="width:220px" />
+            </label>
+        </div>
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-dp">
+                <thead>
+                    <tr><th>Data product</th><th>Gobierno</th><th>Responsable</th><th>Estatus</th><th class="derecha">Vistas</th><th>Avance actual</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in Model.DataProducts)
+                    {
+                        <tr class="fila-link" data-href="@Url.Page("Detalle", new { id = d.DpId })" data-texto="@d.Nombre @d.Gobierno">
+                            <td><a asp-page="Detalle" asp-route-id="@d.DpId">@d.Nombre</a></td>
+                            <td>@d.Gobierno</td>
+                            <td>@Ui.Texto(d.Responsable, "[responsable]")</td>
+                            <td><span class="badge @(d.Estatus == "EN_CURSO" ? "badge-ok" : "")">@Ui.EstatusDp(d.Estatus)</span></td>
+                            <td class="num">@d.Vistas</td>
+                            <td>
+                                <div class="avance">
+                                    <span class="mono">@Ui.Pct(d.Avance)</span>
+                                    <div class="barra"><span style="width:@Math.Min(100, Math.Round(d.Avance))%"></span></div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <aside class="panel lateral" aria-labelledby="h-nuevo">
+        <form method="post" asp-page-handler="Crear" class="panel-cuerpo">
+            <h2 id="h-nuevo">Nuevo data product</h2>
+            <label class="campo">Nombre
+                <input type="text" name="Nombre" required maxlength="150" />
+            </label>
+            <label class="campo">Gobierno
+                <select name="Gobierno" required>
+                    <option value="">Selecciona…</option>
+                    @foreach (var g in Model.Gobiernos) { <option>@g</option> }
+                </select>
+            </label>
+            <label class="campo">Responsable
+                <input type="text" name="Responsable" list="responsables" maxlength="150" />
+                <datalist id="responsables">@foreach (var r in Model.Responsables) { <option value="@r"></option> }</datalist>
+            </label>
+            <p class="ayuda">Las vistas se asignan después desde Vistas gobernadas; una vista solo cuenta para el avance desde la fecha en que se agrega.</p>
+            <button type="submit" class="btn btn-primario">Crear data product</button>
+        </form>
+    </aside>
+</div>

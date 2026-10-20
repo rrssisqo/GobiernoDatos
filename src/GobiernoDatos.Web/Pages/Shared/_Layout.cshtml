@@ -1,0 +1,71 @@
+@inject IUsuarioActual Usuario
+@inject GobiernoDatos.Web.Data.FuenteDatos Fuente
+@{
+    var nav = ViewData["Nav"] as string;
+    string Activo(string clave) => nav == clave ? "page" : "false";
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] · Gobierno de Datos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script>
+        // Aplica el estado del menú antes de pintar la página, para que no "parpadee" al navegar.
+        try { if (localStorage.getItem('gd-menu') === 'oculto') document.documentElement.classList.add('menu-oculto'); } catch { }
+    </script>
+</head>
+<body>
+<div class="app">
+    <nav class="sidebar" aria-label="Principal">
+        <div class="marca-fila">
+            <span class="marca">Gobierno de Datos</span>
+            <button type="button" class="menu-toggle" id="menu-toggle" aria-controls="menu-enlaces" aria-expanded="true" aria-label="Ocultar menú" title="Ocultar menú">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+            </button>
+        </div>
+        <div class="menu-enlaces" id="menu-enlaces">
+        <a asp-page="/Index" aria-current="@Activo("seguimiento")">Seguimiento semanal</a>
+        <a asp-page="/DataProducts/Index" aria-current="@Activo("dp")">Data products</a>
+        <a asp-page="/Vistas/Index" aria-current="@Activo("vistas")">Vistas gobernadas</a>
+        <a asp-page="/Calidad/Index" aria-current="@Activo("calidad")">Calidad</a>
+        <a asp-page="/Tareas/Index" aria-current="@Activo("tareas")">Seguimiento tarea</a>
+        <div class="seccion">Recertificación de accesos</div>
+        @if (Usuario.TieneRol(RolesPortal.Administrador))
+        {
+            <a asp-page="/Recertificacion/Eventos" aria-current="@Activo("eventos")">Eventos</a>
+        }
+        @if (Usuario.TieneRol(RolesPortal.Certificador))
+        {
+            <a asp-page="/Recertificacion/Mi" aria-current="@Activo("mi")">Mi recertificación</a>
+        }
+        @if (Usuario.TieneRol(RolesPortal.Administrador))
+        {
+            <a asp-page="/Recertificacion/Bajas" aria-current="@Activo("bajas")">Bajas y evidencia</a>
+        }
+        </div>
+        <div class="usuario">
+            <span>@Usuario.Nombre</span>
+            <span class="sutil">@(Usuario.Simulado ? "Sesión simulada" : Usuario.Login) · @Fuente.Descripcion</span>
+        </div>
+    </nav>
+
+    <main class="contenido">
+        @if (TempData["MensajeOk"] is string ok)
+        {
+            <div class="aviso aviso-ok" role="status">@ok</div>
+        }
+        @if (TempData["MensajeError"] is string error)
+        {
+            <div class="aviso aviso-error" role="alert">@error</div>
+        }
+        @RenderBody()
+    </main>
+</div>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

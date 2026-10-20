@@ -1,0 +1,474 @@
+using System.Data;
+using Dapper;
+using GobiernoDatos.Web.Domain;
+using GobiernoDatos.Web.Services;
+using Microsoft.Data.SqlClient;
+using static GobiernoDatos.Web.Data.Sql.SqlAux;
+
+namespace GobiernoDatos.Web.Data.Sql;
+
+// Recertificación sobre el esquema gd v3. Las reglas viven en la base (procedimientos sp_*, CHECK y triggers):
+// este servicio solo los invoca y traduce sus errores (THROW 50xxx) a mensajes de negocio.
+// Seguridad por fila: el certificador se identifica por gd.responsable.usuario_red (DOMINIO\usuario) y solo ve las macro áreas
+// donde es titular o delegado vigente (gd.macro_area_certificador).
+public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuarios directorio, Microsoft.Extensions.Options.IOptions<GobiernoDatosOptions> opciones) : IRecertificacionService
+{
+    // ---- Eventos ----
+
+    private sealed record EventoRow(int evento_id, string nombre, DateTime? fecha_extracto, DateTime? fecha_inicio, DateTime? fecha_limite,
+                                    DateTime? fecha_cierre, string estatus, int val_roles_varias_vistas, int val_vistas_varios_roles,
+                                    int val_roles_nuevos, int val_vistas_nuevas);
+    private sealed record RechazoRow(int? fila, string? usuario, string? rol, string? vista, string motivo);
+    private sealed record ConfirmacionRow(int macro_area_id, string usuario, DateTime fecha_registro);
+
+    private static RecertEvento? CargarEvento(IDbConnection c, int eventoId)
+    {
+        using var m = c.QueryMultiple("""
+            SELECT evento_id, nombre, fecha_extracto, fecha_inicio, fecha_limite, fecha_cierre, estatus,
+                   val_roles_varias_vistas, val_vistas_varios_roles, val_roles_nuevos, val_vistas_nuevas
+            FROM gd.recert_evento WHERE evento_id = @eventoId;
+            SELECT fila, usuario, rol, vista, motivo FROM gd.recert_carga_rechazo WHERE evento_id = @eventoId ORDER BY fila;
+            SELECT macro_area_id, usuario, fecha_registro FROM gd.recert_confirmacion WHERE evento_id = @eventoId;
+            """, new { eventoId });
+        var e = m.ReadSingleOrDefault<EventoRow>();
+        if (e is null) return null;
+        var rechazos = m.Read<RechazoRow>().ToList();
+        var confirmaciones = m.Read<ConfirmacionRow>().ToList();
+
+        var evento = new RecertEvento
+        {
+            EventoId = e.evento_id, Nombre = e.nombre, FechaExtracto = D(e.fecha_extracto), FechaInicio = D(e.fecha_inicio),
+            FechaLimite = D(e.fecha_limite), FechaCierre = D(e.fecha_cierre), Estatus = Enum.Parse<EstatusEvento>(e.estatus),
+            Validacion = new ValidacionCarga(e.val_roles_varias_vistas, e.val_vistas_varios_roles, e.val_roles_nuevos, e.val_vistas_nuevas, rechazos.Count),
+        };
+        evento.Rechazos.AddRange(rechazos.Select(r => new RecertCargaRechazo(r.fila ?? 0, r.usuario, r.rol, r.vista, r.motivo)));
+        evento.Confirmaciones.AddRange(confirmaciones.Select(x => new ConfirmacionMacroArea(x.macro_area_id, x.usuario, x.fecha_registro)));
+        return evento;
+    }
+
+    public RecertEvento? EventoActivo()
+    {
+        using var c = db.Abrir();
+        var id = c.ExecuteScalar<int?>("""
+            SELECT TOP (1) evento_id FROM gd.recert_evento
+            ORDER BY CASE WHEN estatus <> 'CERRADO' THEN 0 ELSE 1 END, evento_id DESC
+            """);
+        return id is null ? null : CargarEvento(c, id.Value);
+    }
+
+    private sealed record HistorialRow(int evento_id, string nombre, DateTime? fecha_inicio, DateTime? fin, string estatus,
+                                       int accesos, int bajas, int ejecutadas);
+
+    public IReadOnlyList<FilaHistorialEvento> Historial()
+    {
+        using var c = db.Abrir();
+        return c.Query<HistorialRow>("""
+            SELECT e.evento_id, e.nombre, e.fecha_inicio, ISNULL(e.fecha_cierre, e.fecha_limite) AS fin, e.estatus,
+                   (SELECT COUNT(*) FROM gd.recert_acceso AS a WHERE a.evento_id = e.evento_id) AS accesos,
+                   (SELECT COUNT(*) FROM gd.vw_recert_evidencia AS x WHERE x.evento_id = e.evento_id AND x.decision = 'BAJA') AS bajas,
+                   (SELECT COUNT(*) FROM gd.vw_recert_evidencia AS x
+                    WHERE x.evento_id = e.evento_id AND x.decision = 'BAJA' AND x.fecha_ejecucion IS NOT NULL) AS ejecutadas
+            FROM gd.recert_evento AS e
+            ORDER BY e.evento_id DESC
+            """).Select(h => new FilaHistorialEvento(h.evento_id, h.nombre, D(h.fecha_inicio), D(h.fin), Enum.Parse<EstatusEvento>(h.estatus),
+                                                     h.accesos, h.bajas, h.ejecutadas)).ToList();
+    }
+
+    private sealed record AvanceRow(int macro_area_id, string macro_area, int accesos, int continua, int baja);
+    private sealed record CertRow(int macro_area_id, string nombre, string tipo);
+
+    public TableroEvento? Tablero(int eventoId)
+    {
+        using var c = db.Abrir();
+        var evento = CargarEvento(c, eventoId);
+        if (evento is null) return null;
+        var macros = MacroAreas(c, eventoId, null, evento);
+        return new TableroEvento(evento, new Conteo(macros.Sum(m => m.Conteo.Accesos), macros.Sum(m => m.Conteo.Continua), macros.Sum(m => m.Conteo.Baja)), macros);
+    }
+
+    private List<FilaMacroArea> MacroAreas(IDbConnection c, int eventoId, IReadOnlySet<int>? solo, RecertEvento evento)
+    {
+        var avance = c.Query<AvanceRow>("""
+            SELECT macro_area_id, macro_area, accesos, continua, baja
+            FROM gd.vw_recert_avance_macro_area WHERE evento_id = @eventoId
+            """, new { eventoId });
+        var certs = c.Query<CertRow>("""
+            SELECT ca.macro_area_id, r.nombre, ca.tipo
+            FROM gd.macro_area_certificador AS ca JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+            WHERE ca.fecha_desde <= @hoy AND (ca.fecha_hasta IS NULL OR ca.fecha_hasta >= @hoy)
+            ORDER BY ca.tipo DESC, r.nombre
+            """, new { hoy = P(db.Hoy) }).ToLookup(x => x.macro_area_id, x => x.nombre);
+        return avance.Where(a => solo is null || solo.Contains(a.macro_area_id))
+            .Select(a => new FilaMacroArea(a.macro_area_id, a.macro_area, certs[a.macro_area_id].ToList(), new Conteo(a.accesos, a.continua, a.baja),
+                                           evento.Confirmaciones.Any(x => x.MacroAreaId == a.macro_area_id)))
+            .OrderBy(m => m.MacroArea).ToList();
+    }
+
+    public int CrearEvento(string nombre, DateOnly? fechaExtracto, DateOnly? fechaLimite, IReadOnlyList<Dictionary<string, string>> extracto)
+    {
+        var tabla = Staging(extracto);
+        return Negocio(() => db.EnTransaccion((c, tx) => Cargar(c, tx, nombre, fechaExtracto, fechaLimite, tabla)));
+    }
+
+    // Columnas del extracto (CSV o HANA, ya normalizadas por la fuente) → filas de gd.stg_recertificacion.
+    private static DataTable Staging(IReadOnlyList<Dictionary<string, string>> extracto)
+    {
+        if (extracto.Count == 0) throw new DomainException("El extracto no tiene filas.");
+        if (!extracto[0].ContainsKey("USUARIO") || !extracto[0].ContainsKey("ROL") || !extracto[0].ContainsKey("VISTA"))
+            throw new DomainException("El extracto no tiene las columnas de recertificación (USUARIO, ROL, VISTA…).");
+
+        var t = new DataTable();
+        foreach (var col in new[] { "area", "content", "usuario", "nombre", "rol", "vista", "accesos_3m", "area_responsable", "responsable" })
+            t.Columns.Add(col, typeof(string));
+        foreach (var f in extracto)
+            t.Rows.Add(f.GetValueOrDefault("AREA"), f.GetValueOrDefault("CONTENT"), f.GetValueOrDefault("USUARIO"), f.GetValueOrDefault("NOMBRE"),
+                       f.GetValueOrDefault("ROL"), f.GetValueOrDefault("VISTA"), f.GetValueOrDefault("ACCESO ULTIMOS 3 MESES"),
+                       f.GetValueOrDefault("Área Responsable") ?? f.GetValueOrDefault("Area Responsable"), f.GetValueOrDefault("Responsable"));
+        return t;
+    }
+
+    // El staging es compartido: se vacía y se llena dentro de la misma transacción que la carga (SqlBulkCopy: miles de filas).
+    private static int Cargar(IDbConnection c, IDbTransaction tx, string nombre, DateOnly? fechaExtracto, DateOnly? fechaLimite, DataTable tabla)
+    {
+        c.Execute("TRUNCATE TABLE gd.stg_recertificacion", transaction: tx);
+        using (var bulk = new SqlBulkCopy((SqlConnection)c, SqlBulkCopyOptions.Default, (SqlTransaction)tx)
+               { DestinationTableName = "gd.stg_recertificacion", BulkCopyTimeout = 300 })
+        {
+            foreach (DataColumn col in tabla.Columns) bulk.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+            bulk.WriteToServer(tabla);
+        }
+        return c.QueryFirst<int>("gd.sp_cargar_extracto_recertificacion",
+            new { nombre, fecha_extracto = fechaExtracto?.ToDateTime(TimeOnly.MinValue), fecha_limite = fechaLimite?.ToDateTime(TimeOnly.MinValue), usuario = "portal" },
+            tx, commandType: CommandType.StoredProcedure, commandTimeout: 300);
+    }
+
+    public void AbrirEvento(int eventoId) => Sp("gd.sp_abrir_evento", new { evento_id = eventoId });
+
+    public int CerrarEvento(int eventoId) => Negocio(() =>
+    {
+        using var c = db.Abrir();
+        return c.QuerySingle<int>("gd.sp_cerrar_evento", new { evento_id = eventoId }, commandType: CommandType.StoredProcedure);
+    });
+
+    public void DescartarBorrador(int eventoId) => Sp("gd.sp_descartar_evento", new { evento_id = eventoId });
+
+    // ---- Mi recertificación ----
+
+    private sealed record AccesoRow(long acceso_id, string usuario, string nombre_usuario, string vista, string rol, int macro_area_id,
+                                    string macro_area, int accesos_3m, string decision, string? comentario, string? ticket, string? anterior);
+
+    public MiRecertificacion MisAccesos(string certificador)
+    {
+        using var c = db.Abrir();
+        var eventoId = c.ExecuteScalar<int?>("SELECT TOP (1) evento_id FROM gd.recert_evento WHERE estatus <> 'BORRADOR' ORDER BY evento_id DESC");
+        if (eventoId is null) return new(null, [], []);
+        var evento = CargarEvento(c, eventoId.Value)!;
+
+        var accesos = c.Query<AccesoRow>("""
+            DECLARE @anterior INT = (SELECT TOP (1) evento_id FROM gd.recert_evento
+                                     WHERE estatus <> 'BORRADOR' AND evento_id < @eventoId ORDER BY evento_id DESC);
+            SELECT x.acceso_id, x.usuario, x.nombre_usuario, x.vista, x.rol, x.macro_area_id, x.macro_area, x.accesos_3m,
+                   x.decision, x.comentario, x.ticket, p.decision AS anterior
+            FROM gd.vw_recert_evidencia AS x
+            OUTER APPLY (SELECT TOP (1) pv.decision FROM gd.vw_recert_evidencia AS pv
+                         WHERE pv.evento_id = @anterior AND pv.usuario = x.usuario AND pv.rol = x.rol AND pv.decision <> 'PENDIENTE') AS p
+            WHERE x.evento_id = @eventoId
+              AND EXISTS (SELECT 1 FROM gd.macro_area_certificador AS ca JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+                          WHERE r.usuario_red = @certificador AND ca.macro_area_id = x.macro_area_id
+                            AND ca.fecha_desde <= @hoy AND (ca.fecha_hasta IS NULL OR ca.fecha_hasta >= @hoy))
+            ORDER BY x.vista, x.accesos_3m DESC
+            """, new { eventoId, certificador = LoginParaBuscar(certificador), hoy = P(db.Hoy) }).ToList();
+
+        var mias = accesos.Select(a => a.macro_area_id).ToHashSet();
+        return new(evento, MacroAreas(c, eventoId.Value, mias, evento), accesos.Select(a => new AccesoCertificar(
+            a.acceso_id, a.usuario, a.nombre_usuario, a.vista, a.rol, a.macro_area, a.accesos_3m, Decisión(a.anterior),
+            Decisión(a.decision), a.comentario, a.ticket is not null)).ToList());
+    }
+
+    private sealed record AccesoClave(int evento_id, int macro_area_id);
+
+    public ResultadoDecision Decidir(long accesoId, Decision decision, string? comentario, string certificador) => Negocio(() =>
+    {
+        using var c = db.Abrir();
+        Registrar(c, null, accesoId, decision, comentario, certificador);
+        var a = c.QuerySingle<AccesoClave>("SELECT evento_id, macro_area_id FROM gd.recert_acceso WHERE acceso_id = @accesoId", new { accesoId });
+        var avance = c.QuerySingle<AvanceRow>("""
+            SELECT macro_area_id, macro_area, accesos, continua, baja FROM gd.vw_recert_avance_macro_area
+            WHERE evento_id = @evento_id AND macro_area_id = @macro_area_id
+            """, new { a.evento_id, a.macro_area_id });
+        return new ResultadoDecision(accesoId, decision, string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim(),
+                                     new Conteo(avance.accesos, avance.continua, avance.baja));
+    });
+
+    // Acción masiva: una decisión individual por acceso pendiente, todo o nada.
+    // Cada acceso se registra de forma individual con gd.sp_registrar_decision (reglas en la base). Para miles de accesos,
+    // las decisiones existentes y el responsable de cada macro área se consultan una sola vez.
+    public int ContinuaMasivo(IEnumerable<long> accesoIds, string certificador) => Negocio(() => db.EnTransaccion((c, tx) =>
+    {
+        var ids = accesoIds.Distinct().ToList();
+        if (ids.Count == 0) return 0;
+        var login = LoginParaBuscar(certificador);
+        var accesos = c.Query<MasivoRow>("""
+            SELECT a.acceso_id, a.macro_area_id,
+                   CAST(CASE WHEN EXISTS (SELECT 1 FROM gd.recert_decision AS d WHERE d.acceso_id = a.acceso_id) THEN 1 ELSE 0 END AS BIT) AS decidido
+            FROM gd.recert_acceso AS a
+            WHERE a.acceso_id IN (SELECT CAST(value AS BIGINT) FROM STRING_SPLIT(@ids, ','))
+            """, new { ids = string.Join(",", ids) }, tx).ToDictionary(a => a.acceso_id);
+        var responsables = c.Query<ResponsableMacroRow>("""
+            SELECT ca.macro_area_id, MIN(ca.responsable_id) AS responsable_id
+            FROM gd.macro_area_certificador AS ca JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+            WHERE r.usuario_red = @login AND ca.fecha_desde <= @hoy AND (ca.fecha_hasta IS NULL OR ca.fecha_hasta >= @hoy)
+            GROUP BY ca.macro_area_id
+            """, new { login, hoy = P(db.Hoy) }, tx).ToDictionary(r => r.macro_area_id, r => r.responsable_id);
+
+        int n = 0;
+        foreach (var id in ids)
+        {
+            if (!accesos.TryGetValue(id, out var a)) throw new DomainException("El acceso no existe.");
+            if (a.decidido) continue;
+            if (!responsables.TryGetValue(a.macro_area_id, out var responsableId))
+                throw new DomainException("No eres certificador vigente de la macro área de este acceso.");
+            c.Execute("gd.sp_registrar_decision",
+                new { acceso_id = id, decision = "CONTINUA", comentario = "Acción masiva", responsable_id = responsableId, usuario = login },
+                tx, commandType: CommandType.StoredProcedure);
+            n++;
+        }
+        return n;
+    }));
+
+    private sealed record MasivoRow(long acceso_id, int macro_area_id, bool decidido);
+    private sealed record ResponsableMacroRow(int macro_area_id, int responsable_id);
+
+    private void Registrar(IDbConnection c, IDbTransaction? tx, long accesoId, Decision decision, string? comentario, string certificador)
+    {
+        var responsableId = ResponsableCertificador(c, tx, accesoId, certificador)
+                            ?? throw new DomainException("No eres certificador vigente de la macro área de este acceso.");
+        c.Execute("gd.sp_registrar_decision",
+            new { acceso_id = accesoId, decision = decision.ToString(), comentario, responsable_id = responsableId, usuario = LoginParaBuscar(certificador) },
+            tx, commandType: CommandType.StoredProcedure);
+    }
+
+    private int? ResponsableCertificador(IDbConnection c, IDbTransaction? tx, long accesoId, string certificador) =>
+        c.ExecuteScalar<int?>("""
+            SELECT TOP (1) ca.responsable_id
+            FROM gd.recert_acceso AS a
+            JOIN gd.macro_area_certificador AS ca ON ca.macro_area_id = a.macro_area_id
+            JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+            WHERE a.acceso_id = @accesoId AND r.usuario_red = @certificador
+              AND ca.fecha_desde <= @hoy AND (ca.fecha_hasta IS NULL OR ca.fecha_hasta >= @hoy)
+            """, new { accesoId, certificador = LoginParaBuscar(certificador), hoy = P(db.Hoy) }, tx);
+
+    public void ConfirmarMacroArea(int macroAreaId, string certificador) => Negocio(() =>
+    {
+        using var c = db.Abrir();
+        var eventoId = c.ExecuteScalar<int?>("SELECT TOP (1) evento_id FROM gd.recert_evento WHERE estatus = 'ABIERTO' ORDER BY evento_id DESC")
+                       ?? throw new DomainException("No hay un evento abierto.");
+        var responsableId = c.ExecuteScalar<int?>("""
+            SELECT TOP (1) ca.responsable_id FROM gd.macro_area_certificador AS ca JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+            WHERE ca.macro_area_id = @macroAreaId AND r.usuario_red = @certificador
+              AND ca.fecha_desde <= @hoy AND (ca.fecha_hasta IS NULL OR ca.fecha_hasta >= @hoy)
+            """, new { macroAreaId, certificador = LoginParaBuscar(certificador), hoy = P(db.Hoy) }) ?? throw new DomainException("No eres certificador de esa macro área.");
+        c.Execute("gd.sp_confirmar_macro_area",
+            new { evento_id = eventoId, macro_area_id = macroAreaId, responsable_id = responsableId, usuario = LoginParaBuscar(certificador) },
+            commandType: CommandType.StoredProcedure);
+        return 0;
+    });
+
+    // ---- Bajas y evidencia ----
+
+    private sealed record BajaRow(long acceso_id, string usuario, string nombre_usuario, string vista, string rol, string macro_area,
+                                  string? decidido_por, DateTime fecha_decision, string? comentario, string? ticket,
+                                  DateTime? fecha_ejecucion, string? ejecutado_por);
+
+    public TableroBajas? Bajas(int eventoId)
+    {
+        using var c = db.Abrir();
+        var evento = CargarEvento(c, eventoId);
+        if (evento is null) return null;
+        var filas = c.Query<BajaRow>("""
+            SELECT acceso_id, usuario, nombre_usuario, vista, rol, macro_area, decidido_por, fecha_decision, comentario,
+                   ticket, fecha_ejecucion, ejecutado_por
+            FROM gd.vw_recert_evidencia WHERE evento_id = @eventoId AND decision = 'BAJA'
+            """, new { eventoId }).Select(b => new FilaBaja(b.acceso_id, b.usuario, b.nombre_usuario, b.vista, b.rol, b.macro_area,
+                b.decidido_por ?? "", b.fecha_decision, b.comentario,
+                b.fecha_ejecucion is null ? null : new RecertBajaEjecucion
+                {
+                    AccesoId = b.acceso_id, FechaEjecucion = D(b.fecha_ejecucion.Value), Ticket = b.ticket!, EjecutadoPor = b.ejecutado_por!,
+                }))
+            .OrderBy(f => f.Ejecucion is not null).ThenBy(f => f.FechaDecision).ToList();
+
+        var ejecutadas = filas.Where(f => f.Ejecucion is not null).ToList();
+        decimal? dias = ejecutadas.Count == 0 ? null
+            : (decimal)ejecutadas.Average(f => f.Ejecucion!.FechaEjecucion.DayNumber - DateOnly.FromDateTime(f.FechaDecision).DayNumber);
+        return new TableroBajas(evento, filas, filas.Count, ejecutadas.Count, dias);
+    }
+
+    private sealed record IncluidoRow(string nombre, DateTime fecha, int accesos_3m);
+    private sealed record DecisionRow(string decision, string? comentario, string nombre, DateTime fecha_registro);
+    private sealed record EjecucionRow(DateTime fecha_ejecucion, string ticket, string ejecutado_por);
+
+    public IReadOnlyList<PasoTraza> Traza(long accesoId)
+    {
+        using var c = db.Abrir();
+        using var m = c.QueryMultiple("""
+            SELECT e.nombre, COALESCE(CAST(e.fecha_inicio AS DATETIME2), CAST(e.fecha_extracto AS DATETIME2), e.fecha_registro) AS fecha, a.accesos_3m
+            FROM gd.recert_acceso AS a JOIN gd.recert_evento AS e ON e.evento_id = a.evento_id WHERE a.acceso_id = @accesoId;
+            SELECT d.decision, d.comentario, r.nombre, d.fecha_registro
+            FROM gd.recert_decision AS d JOIN gd.responsable AS r ON r.responsable_id = d.decidido_por
+            WHERE d.acceso_id = @accesoId ORDER BY d.decision_id;
+            SELECT fecha_ejecucion, ticket, ejecutado_por FROM gd.recert_baja_ejecucion WHERE acceso_id = @accesoId;
+            """, new { accesoId });
+        var incluido = m.ReadSingleOrDefault<IncluidoRow>();
+        if (incluido is null) return [];
+        var pasos = new List<PasoTraza> { new(incluido.fecha, "Acceso incluido en el evento", $"{incluido.nombre} · {incluido.accesos_3m:N0} accesos en 3 meses") };
+        Decision? previa = null;
+        foreach (var d in m.Read<DecisionRow>())
+        {
+            var actual = Enum.Parse<Decision>(d.decision);
+            var titulo = previa is null ? $"Decisión: {ReglasRecertificacion.Etiqueta(actual)}"
+                       : previa == actual ? $"Decisión ratificada: {ReglasRecertificacion.Etiqueta(actual)}"
+                       : $"Decisión cambiada a {ReglasRecertificacion.Etiqueta(actual)}";
+            pasos.Add(new(d.fecha_registro, titulo, d.nombre + (d.comentario is null ? "" : " · " + d.comentario)));
+            previa = actual;
+        }
+        if (m.ReadSingleOrDefault<EjecucionRow>() is { } ej)
+            pasos.Add(new(ej.fecha_ejecucion, "Rol retirado", $"{ej.ejecutado_por} · ticket {ej.ticket}"));
+        return pasos;
+    }
+
+    public void RegistrarEjecucion(long accesoId, string ticket, DateOnly? fecha, string usuario) =>
+        Sp("gd.sp_registrar_baja_ejecucion",
+           new { acceso_id = accesoId, ticket, ejecutado_por = usuario, fecha_ejecucion = fecha?.ToDateTime(TimeOnly.MinValue) });
+
+    private sealed record EvidenciaRow(string evento, string estatus_evento, string macro_area, string usuario, string nombre_usuario,
+                                       string rol, string vista, int accesos_3m, string decision, string? comentario, string? decidido_por,
+                                       DateTime? fecha_decision, string? ticket, DateTime? fecha_ejecucion, string? ejecutado_por);
+
+    public string EvidenciaCsv(int eventoId)
+    {
+        using var c = db.Abrir();
+        var filas = c.Query<EvidenciaRow>("""
+            SELECT evento, estatus_evento, macro_area, usuario, nombre_usuario, rol, vista, accesos_3m, decision, comentario,
+                   decidido_por, fecha_decision, ticket, fecha_ejecucion, ejecutado_por
+            FROM gd.vw_recert_evidencia WHERE evento_id = @eventoId ORDER BY macro_area, vista, usuario
+            """, new { eventoId });
+        return Csv.Escribir(["Evento", "Estatus evento", "Macro área", "Usuario", "Nombre", "Rol", "Vista", "Accesos 3 meses",
+                             "Decisión", "Comentario", "Decidió", "Fecha decisión", "Ticket", "Fecha ejecución", "Ejecutó"],
+            filas.Select(f => new object?[]
+            {
+                f.evento, ReglasRecertificacion.Etiqueta(Enum.Parse<EstatusEvento>(f.estatus_evento)), f.macro_area, f.usuario, f.nombre_usuario,
+                f.rol, f.vista, f.accesos_3m, Decisión(f.decision) is { } d ? ReglasRecertificacion.Etiqueta(d) : "PENDIENTE",
+                f.comentario, f.decidido_por, f.fecha_decision?.ToString("yyyy-MM-dd HH:mm"), f.ticket,
+                f.fecha_ejecucion?.ToString("yyyy-MM-dd"), f.ejecutado_por,
+            }));
+    }
+
+    // ---- Certificadores ----
+
+    private sealed record CertificadorRow(int macro_area_id, string macro_area, string? nombre, string? usuario_red, string? tipo);
+
+    public IReadOnlyList<CertificadoresMacroArea> Certificadores()
+    {
+        using var c = db.Abrir();
+        return c.Query<CertificadorRow>("""
+            SELECT m.macro_area_id, m.nombre AS macro_area, r.nombre, r.usuario_red, ca.tipo
+            FROM gd.macro_area AS m
+            LEFT JOIN gd.macro_area_certificador AS ca ON ca.macro_area_id = m.macro_area_id
+                 AND ca.fecha_desde <= @hoy AND (ca.fecha_hasta IS NULL OR ca.fecha_hasta >= @hoy)
+            LEFT JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+            WHERE m.activo = 1
+            """, new { hoy = P(db.Hoy) })
+            .GroupBy(x => (x.macro_area_id, x.macro_area))
+            .Select(g => new CertificadoresMacroArea(g.Key.macro_area_id, g.Key.macro_area,
+                g.Where(x => x.nombre is not null).OrderByDescending(x => x.tipo).ThenBy(x => x.nombre)
+                 .Select(x => new CertificadorVigente(x.nombre!, x.usuario_red, x.tipo!)).ToList()))
+            .OrderBy(m => m.MacroArea).ToList();
+    }
+
+    // El certificador se identifica por su usuario de red; el nombre sale de Active Directory.
+    // La PK del ER (macro_area_id, responsable_id) guarda una vigencia por persona: reasignar reabre la misma fila.
+    public void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo)
+    {
+        if (tipo is not ("TITULAR" or "DELEGADO")) throw new DomainException("El tipo debe ser titular o delegado.");
+        var login = Login(usuarioRed);
+        var nombre = directorio.BuscarNombre(login) ?? throw new DomainException($"El usuario {login} no existe en Active Directory.");
+        db.EnTransaccion((c, tx) =>
+        {
+            if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM gd.macro_area WHERE macro_area_id = @macroAreaId", new { macroAreaId }, tx) == 0)
+                throw new DomainException("La macro área no existe.");
+
+            // Responsable con ese usuario de red; si no hay, uno con el mismo nombre sin usuario de red (p. ej. del extracto); si no, uno nuevo.
+            var responsableId = c.ExecuteScalar<int?>("SELECT responsable_id FROM gd.responsable WITH (UPDLOCK) WHERE usuario_red = @login", new { login }, tx);
+            if (responsableId is null)
+            {
+                responsableId = c.ExecuteScalar<int?>("""
+                    SELECT TOP (1) responsable_id FROM gd.responsable WITH (UPDLOCK)
+                    WHERE nombre = @nombre AND usuario_red IS NULL ORDER BY responsable_id
+                    """, new { nombre }, tx);
+                if (responsableId is not null)
+                    c.Execute("UPDATE gd.responsable SET usuario_red = @login WHERE responsable_id = @responsableId", new { login, responsableId }, tx);
+                else
+                    responsableId = c.ExecuteScalar<int>("INSERT INTO gd.responsable (nombre, usuario_red) OUTPUT inserted.responsable_id VALUES (@nombre, @login)",
+                                                         new { nombre, login }, tx);
+            }
+            c.Execute("""
+                IF EXISTS (SELECT 1 FROM gd.macro_area_certificador WHERE macro_area_id = @macroAreaId AND responsable_id = @responsableId)
+                    UPDATE gd.macro_area_certificador SET tipo = @tipo, fecha_hasta = NULL
+                    WHERE macro_area_id = @macroAreaId AND responsable_id = @responsableId;
+                ELSE
+                    INSERT INTO gd.macro_area_certificador (macro_area_id, responsable_id, tipo, fecha_desde)
+                    VALUES (@macroAreaId, @responsableId, @tipo, @hoy);
+                """, new { macroAreaId, responsableId, tipo, hoy = P(db.Hoy) }, tx);
+        });
+    }
+
+    // Identificador = usuario de red, o el nombre si el certificador aún no tiene usuario de red.
+    public void RetirarCertificador(int macroAreaId, string identificador) =>
+        db.EnTransaccion((c, tx) =>
+        {
+            var n = c.Execute("""
+                DELETE ca FROM gd.macro_area_certificador AS ca JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+                WHERE ca.macro_area_id = @macroAreaId AND ca.fecha_desde >= @hoy
+                  AND (r.usuario_red = @identificador OR (r.usuario_red IS NULL AND r.nombre = @identificador));
+
+                UPDATE ca SET fecha_hasta = DATEADD(DAY, -1, @hoy)
+                FROM gd.macro_area_certificador AS ca JOIN gd.responsable AS r ON r.responsable_id = ca.responsable_id
+                WHERE ca.macro_area_id = @macroAreaId AND ca.fecha_hasta IS NULL
+                  AND (r.usuario_red = @identificador OR (r.usuario_red IS NULL AND r.nombre = @identificador));
+                """, new { macroAreaId, identificador, hoy = P(db.Hoy) }, tx);
+            if (n == 0) throw new DomainException("No es certificador de esa macro área.");
+        });
+
+    private string Login(string usuarioRed) => UsuarioRed.Normalizar(usuarioRed, opciones.Value.DominioPredeterminado);
+
+    // Para buscar: una identidad que no es usuario de red no coincide con nadie (no ve nada), en vez de fallar.
+    private string LoginParaBuscar(string identidad)
+    {
+        try { return Login(identidad); }
+        catch (DomainException) { return identidad.Trim(); }
+    }
+
+    // ---- auxiliares ----
+
+    private static Decision? Decisión(string? d) => d is "CONTINUA" or "BAJA" ? Enum.Parse<Decision>(d) : null;
+
+    private void Sp(string nombre, object parametros) => Negocio(() =>
+    {
+        using var c = db.Abrir();
+        c.Execute(nombre, parametros, commandType: CommandType.StoredProcedure);
+        return 0;
+    });
+
+    // Los procedimientos y triggers de la v3 señalan reglas de negocio con THROW 50xxx.
+    private static T Negocio<T>(Func<T> accion)
+    {
+        try
+        {
+            return accion();
+        }
+        catch (SqlException ex) when (ex.Number >= 50000)
+        {
+            throw new DomainException(ex.Message);
+        }
+    }
+}

@@ -1,0 +1,258 @@
+@page
+@model GobiernoDatos.Web.Pages.Recertificacion.EventosModel
+@{
+    ViewData["Title"] = "Eventos de recertificación";
+    ViewData["Nav"] = "eventos";
+    var t = Model.Tablero;
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Eventos de recertificación</h1>
+        <p>Recertificación de accesos a vistas para auditoría · 2 a 4 eventos por año</p>
+    </div>
+    <div class="acciones">
+        @if (Model.PuedeCrear) { <a class="btn btn-primario" href="#nuevo-evento">Nuevo evento</a> }
+    </div>
+</header>
+
+@if (t is null)
+{
+    <div class="panel"><div class="vacio">Todavía no hay eventos. Crea el primero cargando el extracto de la vista HANA de Recertificación.</div></div>
+}
+else
+{
+    var e = t.Evento;
+    var v = e.Validacion;
+    // Pasos: 1 Borrador · 2 Carga · 3 Validación · 4 Abierto · 5 Cerrado
+    var hechos = e.Estatus switch { EstatusEvento.BORRADOR => e.Rechazos.Count == 0 ? 3 : 2, EstatusEvento.ABIERTO => 3, _ => 5 };
+    var actual = e.Estatus switch { EstatusEvento.BORRADOR => e.Rechazos.Count == 0 ? 4 : 3, EstatusEvento.ABIERTO => 4, _ => 0 };
+    string[] pasos = ["Borrador", "Carga del extracto", "Validación", "Abierto a certificadores", "Cerrado"];
+
+    <section class="panel" aria-labelledby="h-ev">
+        <div class="panel-cab">
+            <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;gap:10px;align-items:center"><h2 id="h-ev">@e.Nombre</h2><span class="badge @Ui.ClaseEstatus(e.Estatus)">@ReglasRecertificacion.Etiqueta(e.Estatus)</span></div>
+                <span class="sutil">Extracto: @Ui.Fecha(e.FechaExtracto) · Inicio: @Ui.Fecha(e.FechaInicio) · Fecha límite: @Ui.Fecha(e.FechaLimite)@(e.FechaCierre is null ? "" : " · Cierre: " + Ui.Fecha(e.FechaCierre))</span>
+            </div>
+            <div class="acciones">
+                @if (e.Estatus == EstatusEvento.BORRADOR)
+                {
+                    <form method="post" asp-page-handler="Descartar" asp-route-evento="@e.EventoId" data-confirmar="¿Descartar el borrador «@e.Nombre»? Podrás volver a cargar el extracto corregido.">
+                        <button type="submit" class="btn btn-peligro">Descartar borrador</button>
+                    </form>
+                    <form method="post" asp-page-handler="Abrir" asp-route-evento="@e.EventoId">
+                        <button type="submit" class="btn btn-primario" disabled="@(e.Rechazos.Count > 0)">Abrir a certificadores</button>
+                    </form>
+                }
+                @if (e.Estatus == EstatusEvento.ABIERTO)
+                {
+                    <form method="post" asp-page-handler="Recordar" asp-route-evento="@e.EventoId">
+                        <button type="submit" class="btn" disabled="@(t.Conteo.Pendientes == 0)">Recordar a pendientes</button>
+                    </form>
+                    <form method="post" asp-page-handler="Cerrar" asp-route-evento="@e.EventoId"
+                          data-confirmar="@(t.Conteo.Pendientes > 0 ? $"Quedan {t.Conteo.Pendientes} accesos sin decisión: se reportarán como pendientes, no se asume ninguna decisión. ¿Cerrar el evento?" : "¿Cerrar el evento? Las decisiones quedarán bloqueadas.")">
+                        <button type="submit" class="btn">Cerrar evento</button>
+                    </form>
+                }
+            </div>
+        </div>
+        <div class="panel-cuerpo">
+            <div class="flujo">
+                @for (int i = 0; i < pasos.Length; i++)
+                {
+                    var n = i + 1;
+                    <div class="paso @(n <= hechos ? "hecho" : "") @(n == actual ? "actual" : "")">
+                        <span class="n">@(n <= hechos ? "✓" : n.ToString())</span><span>@pasos[i]</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
+    <section class="kpis" aria-label="Indicadores">
+        <div class="kpi"><span class="etq">Accesos a certificar</span><span class="valor">@t.Conteo.Accesos</span></div>
+        <div class="kpi"><span class="etq">Decididos</span><span class="valor">@t.Conteo.Decididos</span><span class="nota">@((t.Conteo.Avance * 100).ToString("0"))% del total</span></div>
+        <div class="kpi"><span class="etq">Continúa</span><span class="valor">@t.Conteo.Continua</span></div>
+        <div class="kpi"><span class="etq">Baja</span><span class="valor">@t.Conteo.Baja</span></div>
+        <div class="kpi"><span class="etq">Pendientes</span><span class="valor">@t.Conteo.Pendientes</span></div>
+    </section>
+
+    <div class="dos-columnas ancho">
+        <section class="panel" aria-labelledby="h-av">
+            <div class="panel-cab"><h2 id="h-av">Avance por macro área</h2></div>
+            @if (t.MacroAreas.Count == 0)
+            {
+                <div class="vacio">El evento no tiene accesos aceptados.</div>
+            }
+            else
+            {
+                <div class="tabla-scroll">
+                    <table class="tabla">
+                        <thead><tr><th>Macro área</th><th>Certificador</th><th class="derecha">Accesos</th><th class="derecha">Continúa</th><th class="derecha">Baja</th><th class="derecha">Pendientes</th><th>Avance</th><th><span class="oculto">Acción</span></th></tr></thead>
+                        <tbody>
+                            @foreach (var m in t.MacroAreas)
+                            {
+                                <tr>
+                                    <td>@m.MacroArea @if (m.Confirmada) { <span class="badge badge-ok">Confirmada</span> }</td>
+                                    <td>@(m.Certificadores.Count == 0 ? "[responsable]" : string.Join(", ", m.Certificadores))</td>
+                                    <td class="num">@m.Conteo.Accesos</td>
+                                    <td class="num">@m.Conteo.Continua</td>
+                                    <td class="num">@m.Conteo.Baja</td>
+                                    <td class="num">@m.Conteo.Pendientes</td>
+                                    <td><div class="avance"><span class="mono">@((m.Conteo.Avance * 100).ToString("0"))%</span><div class="barra"><span style="width:@((m.Conteo.Avance * 100).ToString("0"))%"></span></div></div></td>
+                                    <td>
+                                        @if (e.Estatus == EstatusEvento.ABIERTO && m.Conteo.Pendientes > 0)
+                                        {
+                                            <form method="post" asp-page-handler="Recordar" asp-route-evento="@e.EventoId" class="inline">
+                                                <input type="hidden" name="macroArea" value="@m.MacroArea" />
+                                                <button type="submit" class="btn btn-chico">Recordar</button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel" aria-labelledby="h-val">
+            <div class="panel-cab"><h2 id="h-val">Validación de la carga</h2></div>
+            <div class="panel-cuerpo" style="gap:0">
+                <div class="validacion"><span>Roles con más de una vista</span><span><span class="mono">@v.RolesConVariasVistas</span> <span class="badge @(v.RolesConVariasVistas == 0 ? "badge-ok" : "badge-error")">@(v.RolesConVariasVistas == 0 ? "OK" : "Revisar")</span></span></div>
+                <div class="validacion"><span>Vistas con más de un rol</span><span><span class="mono">@v.VistasConVariosRoles</span> <span class="badge @(v.VistasConVariosRoles == 0 ? "badge-ok" : "badge-error")">@(v.VistasConVariosRoles == 0 ? "OK" : "Revisar")</span></span></div>
+                <div class="validacion"><span>Roles nuevos dados de alta</span><span><span class="mono">@v.RolesNuevos</span> <span class="badge badge-ok">OK</span></span></div>
+                <div class="validacion"><span>Vistas nuevas en el inventario</span><span><span class="mono">@v.VistasNuevas</span> <span class="badge badge-ok">OK</span></span></div>
+                <div class="validacion"><span>Filas rechazadas</span><span><span class="mono">@v.FilasRechazadas</span> <span class="badge @(v.FilasRechazadas == 0 ? "badge-ok" : "badge-error")">@(v.FilasRechazadas == 0 ? "OK" : "Revisar")</span></span></div>
+                <p class="ayuda" style="padding-top:12px">El evento no puede abrirse mientras haya filas rechazadas sin resolver: corrige el extracto, descarta el borrador y vuelve a cargarlo.</p>
+                @if (e.Rechazos.Count > 0)
+                {
+                    <details open style="padding-top:12px">
+                        <summary class="ayuda" style="cursor:pointer">Filas rechazadas (@e.Rechazos.Count)</summary>
+                        <ul class="lista-simple" style="margin-top:8px">
+                            @foreach (var r in e.Rechazos)
+                            {
+                                <li><span>Fila @r.Fila · <span class="mono">@r.Usuario @r.Rol</span><span class="ayuda" style="display:block">@r.Vista</span></span><span class="badge badge-error">@r.Motivo</span></li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </div>
+        </section>
+    </div>
+}
+
+<section class="panel" aria-labelledby="h-hist">
+    <div class="panel-cab"><h2 id="h-hist">Historial de eventos</h2></div>
+    <div class="tabla-scroll">
+        <table class="tabla">
+            <thead><tr><th>Evento</th><th>Periodo</th><th class="derecha">Accesos</th><th class="derecha">Bajas</th><th class="derecha">Bajas ejecutadas</th><th>Estatus</th></tr></thead>
+            <tbody>
+                @foreach (var h in Model.Historial)
+                {
+                    <tr class="fila-link @(t?.Evento.EventoId == h.EventoId ? "seleccionada" : "")" data-href="@Url.Page("Eventos", new { evento = h.EventoId })">
+                        <td><a asp-page="Eventos" asp-route-evento="@h.EventoId">@h.Nombre</a></td>
+                        <td>@Ui.Fecha(h.Inicio, "[inicio]") – @Ui.Fecha(h.Fin, "[límite]")</td>
+                        <td class="num">@h.Accesos</td>
+                        <td class="num">@h.Bajas</td>
+                        <td class="num">@h.BajasEjecutadas</td>
+                        <td><span class="badge @Ui.ClaseEstatus(h.Estatus)">@ReglasRecertificacion.Etiqueta(h.Estatus)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel" aria-labelledby="h-cert" id="certificadores">
+    <div class="panel-cab">
+        <h2 id="h-cert">Certificadores por macro área</h2>
+        <span class="sutil">Se asigna por usuario de red (MABENET\usuario); solo el titular o un delegado vigente decide los accesos de su macro área</span>
+    </div>
+    @if (Model.Certificadores.Count == 0)
+    {
+        <div class="vacio">Las macro áreas se crean al cargar el primer extracto.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla">
+                <thead><tr><th>Macro área</th><th>Certificadores vigentes</th><th>Asignar</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.Certificadores)
+                    {
+                        <tr>
+                            <td>@m.MacroArea</td>
+                            <td>
+                                @if (m.Certificadores.Count == 0) { <span class="badge badge-error">Sin certificador</span> }
+                                @foreach (var c in m.Certificadores)
+                                {
+                                    <form method="post" asp-page-handler="Retirar" asp-route-evento="@Model.Evento" class="inline"
+                                          data-confirmar="¿Retirar a @c.Nombre como certificador de @m.MacroArea?" style="display:inline-block;margin:2px 6px 2px 0">
+                                        <input type="hidden" name="macroAreaId" value="@m.MacroAreaId" />
+                                        <input type="hidden" name="identificador" value="@(c.UsuarioRed ?? c.Nombre)" />
+                                        <span class="badge @(c.UsuarioRed is null ? "badge-aviso" : c.Tipo == "TITULAR" ? "badge-ok" : "")"
+                                              title="@(c.UsuarioRed is null ? "Sin usuario de red: no puede certificar hasta asignárselo" : c.UsuarioRed)">
+                                            @c.Nombre · @(c.UsuarioRed ?? "sin usuario de red") · @(c.Tipo == "TITULAR" ? "Titular" : "Delegado")
+                                            <button type="submit" title="Retirar" style="border:0;background:none;cursor:pointer;padding:0 0 0 6px;color:inherit">✕</button></span>
+                                    </form>
+                                }
+                            </td>
+                            <td>
+                                <form method="post" asp-page-handler="Asignar" asp-route-evento="@Model.Evento" class="form-fila compacto" style="min-width:420px">
+                                    <input type="hidden" name="macroAreaId" value="@m.MacroAreaId" />
+                                    <input type="text" name="usuarioRed" required maxlength="100" placeholder="MABENET\usuario" aria-label="Usuario de red para @m.MacroArea" title="Usuario de red: MABENET\usuario (o solo usuario)" style="flex:2 1 180px" />
+                                    <select name="tipo" aria-label="Tipo" style="flex:1 1 110px">
+                                        <option value="TITULAR">Titular</option>
+                                        <option value="DELEGADO">Delegado</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Asignar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="panel" aria-labelledby="h-nuevo" id="nuevo-evento">
+    @if (!Model.PuedeCrear)
+    {
+        <div class="panel-cuerpo">
+            <h2 id="h-nuevo">Nuevo evento</h2>
+            <p class="sutil">Hay un evento en curso. Ciérralo (o descarta el borrador) para cargar un nuevo extracto.</p>
+        </div>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="Crear" class="panel-cuerpo" id="form-nuevo-evento">
+            <h2 id="h-nuevo">Nuevo evento</h2>
+            <p class="ayuda">Consulta @Model.Fuente.Descripcion y crea el evento en borrador. El evento congela esa foto, valida 1 rol = 1 vista y sincroniza el inventario de vistas: las nuevas entran en «Por Iniciar» y las ausentes se marcan, no se borran. La consulta tarda unos segundos.</p>
+            <div class="form-fila">
+                <label class="campo">Nombre del evento <input type="text" name="Nombre" required maxlength="60" placeholder="2026-E2" /></label>
+                <label class="campo">Fecha del extracto <input type="date" name="FechaExtracto" title="Si se deja vacía, se usa la fecha de hoy" /></label>
+                <label class="campo">Fecha límite <input type="date" name="FechaLimite" /></label>
+            </div>
+            @if (!Model.Fuente.Configurada)
+            {
+                <div class="aviso aviso-error">Falta configurar la conexión a HANA (ConnectionStrings:Hana) en el servidor.</div>
+            }
+            <div><button type="submit" class="btn btn-primario" disabled="@(!Model.Fuente.Configurada)">Cargar desde HANA y validar</button></div>
+        </form>
+    }
+</section>
+
+@section Scripts {
+<script>
+    // La consulta a HANA tarda: se indica en el botón para que no se envíe dos veces.
+    // La consulta a HANA tarda: se indica en el botón para que no se envíe dos veces.
+    document.getElementById('form-nuevo-evento')?.addEventListener('submit', e => {
+        const b = e.target.querySelector('button[type=submit]');
+        setTimeout(() => { if (!e.defaultPrevented) { b.disabled = true; b.textContent = 'Consultando HANA…'; } }, 0);
+    });
+</script>
+}

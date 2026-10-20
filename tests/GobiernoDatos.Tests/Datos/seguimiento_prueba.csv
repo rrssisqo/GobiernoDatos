@@ -1,0 +1,10 @@
+,,67%,122,Data Product,,,,,Calidad,,IA,,,,,,,,,,,
+,,,,Owner,,,Funcional,,Owner-Funcional,,,,,,,,,,,,,
+Gobierno,Data Product,Avance,Vistas,Glosarios,Catalogado,DF,Arq.,Linaje,Perfil,Reglas de Calidad,IA,Comunicado,ID Regla Cal,Comentarios,HALLAZGO,Glosarios,Catalogado,Diseño Funcional,Arquitectura,Linaje,Perfilado,Reglas de Calidad
+CDV,DP Uno,100%,4,100%,100%,100%,100%,100%,100%,100%,,,,"42/26 - Se cierra catalogado. 41/26 Se corrige perfilado | 38/52 - texto con marca mal escrita. 29-26 - Se crea DP",,,,,,,,
+Finanzas,DP Dos,86%,,70%,,100,45%,,99%,,,,,"35/26* - Sesión con usuario.
+40/26 - Línea en otro renglón. 27/27 - marca de otro año",,21-Apr,21-Apr,27-Apr,27-Apr,21-Apr,27-Apr,
+Producto,DP Tres,0%,1,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,
+,Sin Gobierno,10%,1,10%,,,,,,,,,,,,,,,,,,
+Comercial,DP Cuatro,50%,2,abc,50%,,,,,,,,,Sin marca de semana,,,,,,,,

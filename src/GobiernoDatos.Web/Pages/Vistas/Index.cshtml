@@ -1,0 +1,257 @@
+@page
+@model GobiernoDatos.Web.Pages.Vistas.IndexModel
+@{
+    ViewData["Title"] = "Vistas gobernadas";
+    ViewData["Nav"] = "vistas";
+    var inv = Model.Inventario;
+    var sel = Model.Seleccionada;
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Vistas gobernadas</h1>
+        <p>Inventario sincronizado desde la vista HANA de Recertificación · no hay alta manual</p>
+    </div>
+    <div class="acciones">
+        <span class="sutil" style="align-self:center">Última sincronización: @Ui.Fecha(inv.UltimaSincronizacion) · @Ui.Texto(inv.EventoSincronizacion, "[evento]")</span>
+        <a class="btn btn-primario" asp-page="/Recertificacion/Eventos" asp-fragment="nuevo-evento">Sincronizar recertificación</a>
+    </div>
+</header>
+
+<section class="kpis" aria-label="Indicadores">
+    <div class="kpi"><span class="etq">En la última recertificación</span><span class="valor">@inv.EnUltimaRecert</span><span class="nota">de @inv.Total en inventario</span></div>
+    <div class="kpi"><span class="etq">Asignadas a data product</span><span class="valor">@inv.AsignadasDp</span></div>
+    <div class="kpi"><span class="etq">Nuevas por clasificar</span><span class="valor">@inv.Nuevas</span><span class="nota">Sin data product ni responsable</span></div>
+    <div class="kpi"><span class="etq">Fuera de la última recertificación</span><span class="valor">@inv.Fuera</span><span class="nota">Revisar si se retiran de su DP</span></div>
+</section>
+
+<div class="dos-columnas ancho">
+    <section class="panel" aria-label="Listado de vistas">
+        <div class="panel-cab">
+            <div class="chips">
+                <a class="chip" asp-all-route-data="@ToDict(Model.Ruta(new { tab = (object?)null, id = (object?)null }))" aria-pressed="@(Model.Tab == PestanaVistas.Todas ? "true" : "false")">Todas <span class="cuenta">@inv.Total</span></a>
+                <a class="chip" asp-all-route-data="@ToDict(Model.Ruta(new { tab = PestanaVistas.Nuevas, id = (object?)null }))" aria-pressed="@(Model.Tab == PestanaVistas.Nuevas ? "true" : "false")">Nuevas por clasificar <span class="cuenta">@inv.Nuevas</span></a>
+                <a class="chip" asp-all-route-data="@ToDict(Model.Ruta(new { tab = PestanaVistas.Fuera, id = (object?)null }))" aria-pressed="@(Model.Tab == PestanaVistas.Fuera ? "true" : "false")">Fuera de recertificación <span class="cuenta">@inv.Fuera</span></a>
+            </div>
+        </div>
+        <form method="get" class="panel-cuerpo form-fila compacto" style="padding-top:12px;padding-bottom:12px">
+            @if (Model.Tab != PestanaVistas.Todas) { <input type="hidden" name="tab" value="@Model.Tab" /> }
+            <label class="campo">Macro área
+                <select name="macro" data-autosubmit>
+                    <option value="">Todas</option>
+                    @foreach (var m in inv.MacroAreas) { <option selected="@(Model.Macro == m)">@m</option> }
+                </select>
+            </label>
+            <label class="campo">Etapa
+                <select name="etapa" data-autosubmit>
+                    <option value="">Todas</option>
+                    @foreach (var e in Catalogos.Etapas) { <option value="@e.Orden" selected="@(Model.Etapa == e.Orden)">@e.Nombre</option> }
+                </select>
+            </label>
+            <label class="campo">Buscar
+                <input type="search" name="q" value="@Model.Q" placeholder="Vista o paquete" />
+            </label>
+        </form>
+        @if (inv.Filas.Count == 0)
+        {
+            <div class="vacio">No hay vistas con estos filtros.</div>
+        }
+        else
+        {
+            <div class="tabla-scroll">
+                <table class="tabla">
+                    <thead>
+                        <tr><th class="col-nombre">Vista</th><th>Macro área</th><th>Data product</th><th>Etapa</th><th class="derecha">Accesos 3 meses</th><th class="derecha">Usuarios</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var f in inv.Filas)
+                        {
+                            var url = Url.Page("Index", Model.Ruta(new { id = f.VistaId }));
+                            <tr class="fila-link @(sel?.Vista.VistaId == f.VistaId ? "seleccionada" : "")" data-href="@url">
+                                <td class="ruta">
+                                    <a href="@url">@f.Vista</a>
+                                    <span class="secundario">@f.Paquete</span>
+                                    @if (f.NombreNegocio != f.Vista) { <span class="ayuda">@f.NombreNegocio</span> }
+                                </td>
+                                <td>@Ui.Texto(f.MacroArea, "—")</td>
+                                <td>@if (f.DataProduct is null) { <span class="badge badge-aviso">Sin asignar</span> } else { @f.DataProduct }</td>
+                                <td>@f.Etapa</td>
+                                <td class="num">@Ui.Num(f.Accesos3m)</td>
+                                <td class="num">@Ui.Num(f.Usuarios)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div class="panel-pie">Accesos de los últimos 3 meses sumados de todos los usuarios con el rol de la vista, según el último extracto.</div>
+    </section>
+
+    @if (sel is not null)
+    {
+        var v = sel.Vista;
+        var rutaSel = ToDict(Model.Ruta(new { id = v.VistaId }));
+        <aside class="panel lateral" aria-labelledby="h-sel">
+            <div class="bloque">
+                <span class="etq-bloque">Vista seleccionada</span>
+                <h2 id="h-sel">@RutaTecnica.Vista(v.RutaTecnica)</h2>
+                @if (!v.EnUltimaRecertificacion) { <span class="badge badge-aviso">Fuera de la última recertificación</span> }
+            </div>
+
+            <div class="bloque">
+                <span class="etq-bloque">De la recertificación · solo lectura</span>
+                <div class="dato"><span>Ruta técnica</span><span class="mono">@v.RutaTecnica</span></div>
+                <div class="dato"><span>Rol HANA</span><span class="mono">@Ui.Texto(sel.Rol, "—")</span></div>
+                <div class="dato"><span>Macro área</span><span>@Ui.Texto(sel.MacroArea, "—")</span></div>
+                <div class="dato"><span>Uso</span><span>@(sel.Accesos3m is null ? "Sin accesos en el último extracto" : $"{Ui.Num(sel.Accesos3m)} accesos en 3 meses · {sel.Usuarios} usuarios")</span></div>
+                <div class="dato"><span>Apariciones</span><span>@Ui.Fecha(v.FechaPrimeraAparicion, "—") → @Ui.Fecha(v.FechaUltimaAparicion, "—")</span></div>
+            </div>
+
+            <form method="post" asp-page-handler="Guardar" asp-all-route-data="@rutaSel" class="bloque">
+                <span class="etq-bloque">Gobierno · editable</span>
+                <label class="campo">Nombre de negocio
+                    <input type="text" name="Form.NombreNegocio" value="@v.NombreNegocio" required maxlength="200" />
+                </label>
+                <label class="campo">Gobierno
+                    <select name="Form.Gobierno">
+                        <option value="">Sin clasificar</option>
+                        @foreach (var g in Model.Gobiernos) { <option selected="@(v.Gobierno == g)">@g</option> }
+                    </select>
+                </label>
+                <label class="campo">Data product
+                    <select name="Form.DpId">
+                        <option value="">Sin asignar</option>
+                        @foreach (var dp in Model.DataProducts) { <option value="@dp.DpId" selected="@(sel.DpId == dp.DpId)">@dp.Nombre · @dp.Gobierno</option> }
+                    </select>
+                </label>
+                <label class="campo">Responsable de la vista
+                    <input type="text" name="Form.Responsable" value="@v.Responsable" list="responsables" maxlength="150" placeholder="[responsable]" />
+                    <datalist id="responsables">@foreach (var r in Model.Responsables) { <option value="@r"></option> }</datalist>
+                </label>
+                <label class="campo">Nivel de seguridad
+                    <select name="Form.NivelSeguridad">
+                        <option value="">Sin definir</option>
+                        @foreach (var n in Catalogos.NivelesSeguridad) { <option selected="@(v.NivelSeguridad == n)">@n</option> }
+                    </select>
+                </label>
+                <button type="submit" class="btn btn-primario">Guardar cambios</button>
+            </form>
+
+            <form method="post" asp-page-handler="Mover" asp-all-route-data="@rutaSel" class="bloque" id="form-etapa">
+                <span class="etq-bloque">Etapa</span>
+                <div>
+                    <strong>@sel.Etapa.Nombre</strong>
+                    <div class="ayuda">@(sel.TareaPendiente is null ? "Flujo completado" : "Pendiente: " + sel.TareaPendiente) · @sel.DiasEnEtapa días en la etapa · ciclo @sel.Ciclo</div>
+                    @if (Model.Tarea is { } t)
+                    {
+                        <div class="ayuda" style="margin-top:4px">Tarea asignada a <strong>@t.AsignadoNombre</strong> (@t.AsignadoA) · @Ui.Fecha(DateOnly.FromDateTime(t.FechaAsignacion)) · @t.DiasTranscurridos días</div>
+                    }
+                    else if (!sel.Etapa.EsFinal)
+                    {
+                        <div class="ayuda" style="margin-top:4px">Tarea de la etapa sin asignar.</div>
+                    }
+                </div>
+                <label class="campo">Mover a
+                    <select name="Mov.EtapaOrden" id="sel-etapa" data-actual="@sel.Etapa.Orden">
+                        @foreach (var e in Catalogos.Etapas.Where(e => e.Orden != sel.Etapa.Orden))
+                        {
+                            <option value="@e.Orden" selected="@(e.Orden == sel.Etapa.Orden + 1)">@e.Orden · @e.Nombre@(e.Orden < sel.Etapa.Orden ? " (regreso)" : "")</option>
+                        }
+                    </select>
+                </label>
+                <label class="campo" id="campo-motivo">Motivo del regreso
+                    <select name="Mov.MotivoId">
+                        <option value="">Selecciona…</option>
+                        @foreach (var m in Catalogos.Motivos.Where(m => m.AplicaA != "REGLA" && m.MotivoId != 1)) { <option value="@m.MotivoId">@m.Nombre</option> }
+                    </select>
+                </label>
+                <label class="campo">Comentario
+                    <input type="text" name="Mov.Comentario" maxlength="1000" />
+                </label>
+                <label class="campo">Asignar la tarea de la nueva etapa a (opcional)
+                    <input type="text" name="Mov.AsignarA" maxlength="100" placeholder="MABENET\usuario" />
+                    <span class="ayuda">Al cambiar de etapa, la tarea abierta se cierra como cancelada.</span>
+                </label>
+                <button type="submit" class="btn">Mover de etapa</button>
+                @if (sel.Historial.Count > 0)
+                {
+                    <details>
+                        <summary class="ayuda" style="cursor:pointer">Historial de etapas (@sel.Historial.Count)</summary>
+                        <ul class="lista-simple" style="margin-top:8px">
+                            @foreach (var h in sel.Historial)
+                            {
+                                <li><span>@h.Etapa@(h.EsRegreso ? " ↩" : "")<span class="ayuda" style="display:block">@h.Motivo@(h.Comentario is null ? "" : " · " + h.Comentario) · @h.Usuario</span></span><span class="ayuda nowrap">@Ui.Fecha(h.Fecha)</span></li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </form>
+
+            @if (!sel.Etapa.EsFinal)
+            {
+                <form method="post" asp-page-handler="AsignarTarea" asp-all-route-data="@rutaSel" class="bloque">
+                    <span class="etq-bloque">Tarea de la etapa actual</span>
+                    <div class="form-fila compacto">
+                        <input type="text" name="UsuarioTarea" required maxlength="100" placeholder="MABENET\usuario"
+                               aria-label="Usuario de red para la tarea de @sel.Etapa.Nombre" style="flex:2 1 160px" />
+                        <button type="submit" class="btn btn-chico" style="flex:0 0 auto">@(Model.Tarea is null ? "Asignar" : "Reasignar")</button>
+                    </div>
+                    <span class="ayuda"><a asp-page="/Tareas/Index">Ver seguimiento de tareas</a></span>
+                </form>
+            }
+
+            <div class="bloque">
+                <span class="etq-bloque">Objetos BW y reglas</span>
+                @if (sel.Objetos.Count == 0)
+                {
+                    <p class="ayuda">Sin objetos BW relacionados: la calidad de las reglas no llega a esta vista.</p>
+                }
+                <ul class="lista-simple">
+                    @foreach (var o in sel.Objetos)
+                    {
+                        <li>
+                            <span class="mono">@o.Nombre</span>
+                            <span>
+                                <a asp-page="/Calidad/Index">@o.Reglas.Count @(o.Reglas.Count == 1 ? "regla" : "reglas")</a>
+                                <form method="post" asp-page-handler="Quitar" asp-all-route-data="@rutaSel" class="inline">
+                                    <input type="hidden" name="ObjetoId" value="@o.ObjetoId" />
+                                    <button type="submit" class="btn btn-chico" title="Retirar objeto">✕</button>
+                                </form>
+                            </span>
+                        </li>
+                    }
+                </ul>
+                <form method="post" asp-page-handler="Relacionar" asp-all-route-data="@rutaSel" class="form-fila compacto">
+                    <select name="ObjetoId" aria-label="Objeto BW" style="flex:2 1 140px">
+                        @foreach (var o in Model.Objetos.Where(o => sel.Objetos.All(x => x.ObjetoId != o.ObjetoId))) { <option value="@o.ObjetoId">@o.Nombre</option> }
+                    </select>
+                    <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Relacionar objeto</button>
+                </form>
+            </div>
+        </aside>
+    }
+</div>
+
+@functions {
+    private static Dictionary<string, string> ToDict(Dictionary<string, object?> ruta) =>
+        ruta.ToDictionary(kv => kv.Key, kv => Convert.ToString(kv.Value) ?? "");
+}
+
+@section Scripts {
+<script>
+(() => {
+    const sel = document.getElementById('sel-etapa');
+    if (!sel) return;
+    const campo = document.getElementById('campo-motivo');
+    const motivo = campo.querySelector('select');
+    const actualizar = () => {
+        const regreso = Number(sel.value) < Number(sel.dataset.actual);
+        campo.classList.toggle('oculto', !regreso);
+        motivo.required = regreso;
+        if (!regreso) motivo.value = '';
+    };
+    sel.addEventListener('change', actualizar);
+    actualizar();
+})();
+</script>
+}

@@ -1,0 +1,302 @@
+erDiagram
+  GOBIERNO ||--o{ SUBDOMINIO : contiene
+  GOBIERNO ||--o{ DATA_PRODUCT : agrupa
+  GOBIERNO ||--o{ VISTA_GOBERNADA : clasifica
+  GOBIERNO |o--o{ REGLA : asigna
+  SUBDOMINIO |o--o{ VISTA_GOBERNADA : clasifica
+  NIVEL_SEGURIDAD |o--o{ VISTA_GOBERNADA : protege
+  RESPONSABLE |o--o{ VISTA_GOBERNADA : atiende
+  RESPONSABLE |o--o{ DATA_PRODUCT : lidera
+  RESPONSABLE |o--o{ REGLA : atiende
+  DATA_PRODUCT ||--o{ DP_VISTA : incluye
+  VISTA_GOBERNADA ||--o{ DP_VISTA : pertenece
+  VISTA_GOBERNADA ||--o{ MOV_ETAPA_VISTA : avanza
+  ETAPA_VISTA ||--o{ MOV_ETAPA_VISTA : define
+  MOTIVO |o--o{ MOV_ETAPA_VISTA : justifica
+  ETAPA_VISTA ||--o{ RUBRO : rango_etapas
+  VISTA_GOBERNADA ||--o{ MOV_AVANCE_VISTA : captura
+  RUBRO ||--o{ MOV_AVANCE_VISTA : nivel_VISTA
+  DATA_PRODUCT ||--o{ MOV_AVANCE_DP : captura
+  RUBRO ||--o{ MOV_AVANCE_DP : nivel_DP
+  DATA_PRODUCT ||--o{ LOG_SEMANAL : documenta
+  SEMANA ||--o{ LOG_SEMANAL : fecha
+  VISTA_GOBERNADA |o--o{ LOG_SEMANAL : refiere
+  RUBRO |o--o{ LOG_SEMANAL : refiere
+  VISTA_GOBERNADA ||--o{ VISTA_OBJETO : consume
+  OBJETO_FUENTE ||--o{ VISTA_OBJETO : alimenta
+  OBJETO_FUENTE ||--o{ REGLA_OBJETO : evaluado
+  REGLA ||--o{ REGLA_OBJETO : evalua
+  TIPO_REGLA |o--o{ REGLA : tipifica
+  REGLA ||--o{ REGLA_CONTACTO : notifica
+  REGLA ||--o{ REGLA_QUERY_HIST : versiona
+  REGLA ||--o{ MOV_ETAPA_REGLA : avanza
+  ETAPA_REGLA ||--o{ MOV_ETAPA_REGLA : define
+  MOTIVO |o--o{ MOV_ETAPA_REGLA : justifica
+  REGLA ||--o{ RESUMEN_CALIDAD : mide
+  MACRO_AREA ||--o{ MACRO_AREA_CERTIFICADOR : certifica
+  RESPONSABLE ||--o{ MACRO_AREA_CERTIFICADOR : es
+  VISTA_GOBERNADA ||--o| ROL_HANA : rol_dedicado
+  RECERT_EVENTO ||--o{ RECERT_ACCESO : congela
+  USUARIO_HANA ||--o{ RECERT_ACCESO : tiene
+  ROL_HANA ||--o{ RECERT_ACCESO : otorga
+  MACRO_AREA ||--o{ RECERT_ACCESO : responde
+  RECERT_ACCESO ||--o{ RECERT_DECISION : decide
+  RESPONSABLE ||--o{ RECERT_DECISION : registra
+  RECERT_ACCESO ||--o| RECERT_BAJA_EJECUCION : ejecuta
+  RECERT_EVENTO ||--o{ RECERT_CARGA_RECHAZO : valida
+  RECERT_EVENTO ||--o{ VISTA_USO : mide
+  VISTA_GOBERNADA ||--o{ VISTA_USO : uso
+
+  GOBIERNO {
+    int gobierno_id PK
+    nvarchar nombre UK
+    bit activo
+  }
+  SUBDOMINIO {
+    int subdominio_id PK
+    int gobierno_id FK
+    nvarchar nombre
+  }
+  RESPONSABLE {
+    int responsable_id PK
+    nvarchar nombre
+    nvarchar correo UK
+  }
+  NIVEL_SEGURIDAD {
+    tinyint nivel_seguridad_id PK
+    nvarchar nombre UK
+  }
+  DATA_PRODUCT {
+    int dp_id PK
+    nvarchar nombre UK
+    int gobierno_id FK
+    int responsable_id FK
+    varchar estatus
+    date fecha_alta
+    date fecha_cierre
+  }
+  VISTA_GOBERNADA {
+    int vista_id PK
+    nvarchar ruta_tecnica UK
+    nvarchar nombre_negocio
+    int gobierno_id FK "nullable hasta clasificar"
+    int subdominio_id FK
+    int responsable_id FK
+    tinyint nivel_seguridad_id FK
+    date fecha_primera_aparicion
+    date fecha_ultima_aparicion
+    bit en_ultima_recertificacion
+    bit activa
+  }
+  DP_VISTA {
+    int dp_vista_id PK
+    int dp_id FK
+    int vista_id FK
+    date fecha_desde
+    date fecha_hasta "NULL = vigente"
+  }
+  ETAPA_VISTA {
+    int etapa_id PK
+    tinyint orden UK
+    nvarchar nombre UK
+    nvarchar tarea_pendiente
+    nvarchar rol_ejecutor
+    bit es_final
+  }
+  RUBRO {
+    int rubro_id PK
+    nvarchar nombre UK
+    varchar nivel "DP o VISTA"
+    nvarchar grupo_responsable
+    decimal peso
+    tinyint etapa_orden_ini FK
+    tinyint etapa_orden_fin FK
+  }
+  MOTIVO {
+    int motivo_id PK
+    nvarchar nombre UK
+    varchar aplica_a
+  }
+  SEMANA {
+    int semana_id PK "AAAASS"
+    date fecha_inicio
+    date fecha_fin
+    varchar etiqueta "39/26"
+  }
+  MOV_ETAPA_VISTA {
+    bigint mov_id PK
+    int vista_id FK
+    int etapa_id FK
+    date fecha
+    int motivo_id FK
+    bit es_regreso
+    nvarchar comentario
+    nvarchar usuario
+  }
+  MOV_AVANCE_VISTA {
+    bigint mov_id PK
+    int vista_id FK
+    int rubro_id FK
+    date fecha
+    decimal pct
+    varchar estado
+    nvarchar usuario
+  }
+  MOV_AVANCE_DP {
+    bigint mov_id PK
+    int dp_id FK
+    int rubro_id FK
+    date fecha
+    decimal pct
+    varchar estado
+    nvarchar usuario
+  }
+  LOG_SEMANAL {
+    bigint log_id PK
+    int dp_id FK
+    int semana_id FK
+    int vista_id FK "opcional"
+    int rubro_id FK "opcional"
+    nvarchar comentario
+  }
+  OBJETO_FUENTE {
+    int objeto_id PK
+    nvarchar nombre UK "PMATERIAL"
+    varchar tipo "CUBO, ADSO..."
+  }
+  VISTA_OBJETO {
+    int vista_objeto_id PK
+    int vista_id FK
+    int objeto_id FK
+    date fecha_desde
+    date fecha_hasta
+  }
+  TIPO_REGLA {
+    int tipo_regla_id PK
+    nvarchar nombre UK
+    nvarchar codigo_informatica
+  }
+  REGLA {
+    int regla_id PK
+    varchar codigo UK "RL_1_1"
+    int tipo_regla_id FK
+    nvarchar descripcion
+    nvarchar regla_funcional
+    nvarchar proposito_negocio
+    varchar dimension_dq
+    int gobierno_id FK
+    int responsable_id FK
+    nvarchar campos_evaluados
+    nvarchar tabla_stg
+    nvarchar mapping
+    int no_csv UK
+    nvarchar nombre_csv UK
+    varchar frecuencia
+    bit escribe_log "STAGE"
+    nvarchar query_validacion
+    bit activa
+  }
+  REGLA_OBJETO {
+    int regla_id PK,FK
+    int objeto_id PK,FK
+  }
+  REGLA_CONTACTO {
+    int regla_id PK,FK
+    nvarchar correo PK
+    varchar tipo PK
+  }
+  REGLA_QUERY_HIST {
+    bigint hist_id PK
+    int regla_id FK
+    nvarchar query_validacion
+    datetime2 vigente_desde
+  }
+  ETAPA_REGLA {
+    int etapa_regla_id PK
+    tinyint orden UK
+    nvarchar nombre UK
+    bit es_operativa
+  }
+  MOV_ETAPA_REGLA {
+    bigint mov_id PK
+    int regla_id FK
+    int etapa_regla_id FK
+    date fecha
+    int motivo_id FK
+  }
+  RESUMEN_CALIDAD {
+    int regla_id PK,FK
+    int periodo PK "AAAAMM"
+    bigint reg_evaluados
+    bigint reg_errores
+    bigint reg_validos "calculado"
+    decimal pct_calidad "calculado"
+  }
+  MACRO_AREA {
+    int macro_area_id PK
+    nvarchar nombre UK "Área Responsable"
+  }
+  MACRO_AREA_CERTIFICADOR {
+    int macro_area_id PK,FK
+    int responsable_id PK,FK
+    varchar tipo "TITULAR o DELEGADO"
+    date fecha_desde
+    date fecha_hasta
+  }
+  USUARIO_HANA {
+    int usuario_id PK
+    varchar codigo UK "BFRMEXFN"
+    nvarchar nombre
+  }
+  ROL_HANA {
+    int rol_id PK
+    nvarchar nombre UK
+    int vista_id FK,UK "1 rol = 1 vista"
+    nvarchar area
+    nvarchar content
+  }
+  RECERT_EVENTO {
+    int evento_id PK
+    nvarchar nombre UK "2026-E2"
+    date fecha_extracto
+    date fecha_inicio
+    date fecha_limite
+    varchar estatus "BORRADOR ABIERTO CERRADO"
+  }
+  RECERT_ACCESO {
+    bigint acceso_id PK
+    int evento_id FK
+    int usuario_id FK
+    int rol_id FK
+    int macro_area_id FK
+    int accesos_3m
+  }
+  RECERT_DECISION {
+    bigint decision_id PK
+    bigint acceso_id FK
+    varchar decision "CONTINUA o BAJA"
+    nvarchar comentario "obligatorio en BAJA"
+    int decidido_por FK
+    datetime2 fecha_registro
+  }
+  RECERT_BAJA_EJECUCION {
+    bigint acceso_id PK,FK
+    date fecha_ejecucion
+    nvarchar ticket
+    nvarchar ejecutado_por
+  }
+  RECERT_CARGA_RECHAZO {
+    bigint rechazo_id PK
+    int evento_id FK
+    nvarchar usuario
+    nvarchar rol
+    nvarchar vista
+    nvarchar motivo
+  }
+  VISTA_USO {
+    int evento_id PK,FK
+    int vista_id PK,FK
+    int accesos_3m
+    int usuarios
+    int roles
+  }

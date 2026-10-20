@@ -1,0 +1,118 @@
+<!doctype html><html lang='es'><head><meta charset='utf-8'><title>MiRecertificacion</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"><style>body{margin:0} a{color:#0E6B66} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+
+<div style="min-height: 0; display: flex; flex-wrap: wrap; background: #F4F5F7; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #17212B">
+<nav aria-label="Principal" style="flex: 0 0 232px; background: #17212B; padding: 24px 16px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box">
+<div style="color: #FFFFFF; font-weight: 600; font-size: 15px; padding: 0 12px 20px">Gobierno de Datos</div>
+<a href="Main.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Seguimiento semanal</a>
+<a href="DetalleDP.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Data products</a>
+<a href="Vistas.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Vistas gobernadas</a>
+<a href="Calidad.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Calidad</a>
+<div style="color: #8B97A3; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 20px 12px 6px">Recertificación de accesos</div>
+<a href="Eventos.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Eventos</a>
+<a href="MiRecertificacion.html" aria-current="page" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; background: #2C3A48; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 500">Mi recertificación</a>
+<a href="Bajas.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Bajas y evidencia</a>
+</nav>
+<main style="flex: 1 1 640px; min-width: 0; padding: 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 600">Mi recertificación</h1>
+<p style="margin: 0; color: #5B6672; font-size: 14px">[Evento 2026-2] · Macro área: TI · Fecha límite: [fecha]</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px"><div style="display: flex; flex-direction: column; gap: 6px; min-width: 240px">
+<span style="font-size: 13px; color: #5B6672"><span style="font-family: 'IBM Plex Mono', monospace; color: #17212B; font-weight: 500">0</span> de 4 accesos decididos</span>
+<div style="height: 8px; background: #E4E8EC; border-radius: 4px"><div style="width: 0%; height: 8px; background: #0E6B66; border-radius: 4px"></div></div>
+</div></div>
+</header>
+<div role="note" style="background: #E6F0FA; color: #1F4E79; border-radius: 8px; padding: 14px 18px; font-size: 14px; line-height: 1.5">
+Indica si cada usuario debe <strong>continuar</strong> con acceso a la vista o si el acceso debe darse de <strong>baja</strong>. La baja retira el rol de la vista al usuario y requiere un comentario para la auditoría.
+</div>
+<section aria-label="Accesos por certificar" style="background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; display: flex; flex-direction: column">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #DDE1E6">
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672">Vista<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>Todas</option><option>CONTINENTAL_GENERICO_CALENDARIOFISCAL</option><option>DM_GENERICO_REGIONSOCIEDAD</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672">Decisión<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>Todas</option><option>Pendientes</option><option>Continúa</option><option>Baja</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672">Usuario<input type="search" placeholder="Nombre o código" style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B; padding: 0 12px; width: 200px"></label>
+</div>
+<button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B">Marcar pendientes como Continúa</button>
+</div>
+<div style="overflow-x: auto">
+<div style="min-width: 1120px; font-size: 13px">
+<div style="display: grid; grid-template-columns: 36px minmax(210px, 1.3fr) minmax(250px, 1.6fr) 96px 104px 196px minmax(220px, 1.4fr); gap: 0 12px; align-items: center; padding: 12px 20px; color: #5B6672; font-size: 12px; font-weight: 500; border-bottom: 1px solid #DDE1E6">
+<span><input type="checkbox" aria-label="Seleccionar todos"></span><span>Usuario</span><span>Vista · rol</span>
+<span style="text-align: right">Accesos 3 meses</span><span>Evento anterior</span><span>Decisión</span><span>Comentario</span>
+</div>
+
+<div style="display: grid; grid-template-columns: 36px minmax(210px, 1.3fr) minmax(250px, 1.6fr) 96px 104px 196px minmax(220px, 1.4fr); gap: 0 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #ECEFF2; background: #FFFFFF">
+<span><input type="checkbox" aria-label="Seleccionar Fernandez, Beatriz (MEX, PAL, CV)"></span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Fernandez, Beatriz (MEX, PAL, CV)</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">BFRMEXFN</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; word-break: break-all">MABE.AGENERICO.GENERICO/CONTINENTAL_GENERICO_CALENDARIOFISCAL</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5B6672; word-break: break-all">CON_GEN_CALENDARIO_FISCAL_GOVERNANCE</span></div>
+<span style="text-align: right; font-family: 'IBM Plex Mono', monospace">1,673</span>
+<span style="color: #5B6672">—</span>
+<div style="display: flex; gap: 6px">
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Continúa</button>
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Baja</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<input type="text" value="" aria-label="Comentario para Fernandez, Beatriz (MEX, PAL, CV)" placeholder="Opcional" style="min-height: 36px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; font-family: inherit; font-size: 13px; color: #17212B">
+<span style="display: none; font-size: 12px; color: #9A3412">La baja requiere comentario</span>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: 36px minmax(210px, 1.3fr) minmax(250px, 1.6fr) 96px 104px 196px minmax(220px, 1.4fr); gap: 0 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #ECEFF2; background: #FFFFFF">
+<span><input type="checkbox" aria-label="Seleccionar Ayala, Yareth (MEX, PAL, CV)"></span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Ayala, Yareth (MEX, PAL, CV)</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">YAZMEXCV</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; word-break: break-all">MABE.AGENERICO.GENERICO/CONTINENTAL_GENERICO_CALENDARIOFISCAL</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5B6672; word-break: break-all">CON_GEN_CALENDARIO_FISCAL_GOVERNANCE</span></div>
+<span style="text-align: right; font-family: 'IBM Plex Mono', monospace">1,012</span>
+<span style="color: #5B6672">—</span>
+<div style="display: flex; gap: 6px">
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Continúa</button>
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Baja</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<input type="text" value="" aria-label="Comentario para Ayala, Yareth (MEX, PAL, CV)" placeholder="Opcional" style="min-height: 36px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; font-family: inherit; font-size: 13px; color: #17212B">
+<span style="display: none; font-size: 12px; color: #9A3412">La baja requiere comentario</span>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: 36px minmax(210px, 1.3fr) minmax(250px, 1.6fr) 96px 104px 196px minmax(220px, 1.4fr); gap: 0 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #ECEFF2; background: #FFFFFF">
+<span><input type="checkbox" aria-label="Seleccionar Arias, Cristhian (CRI, HER, PP)"></span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Arias, Cristhian (CRI, HER, PP)</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">CASCOSSC</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; word-break: break-all">MABE.AGENERICO.GENERICO/CONTINENTAL_GENERICO_CALENDARIOFISCAL</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5B6672; word-break: break-all">CON_GEN_CALENDARIO_FISCAL_GOVERNANCE</span></div>
+<span style="text-align: right; font-family: 'IBM Plex Mono', monospace">859</span>
+<span style="color: #5B6672">—</span>
+<div style="display: flex; gap: 6px">
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Continúa</button>
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Baja</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<input type="text" value="" aria-label="Comentario para Arias, Cristhian (CRI, HER, PP)" placeholder="Opcional" style="min-height: 36px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; font-family: inherit; font-size: 13px; color: #17212B">
+<span style="display: none; font-size: 12px; color: #9A3412">La baja requiere comentario</span>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: 36px minmax(210px, 1.3fr) minmax(250px, 1.6fr) 96px 104px 196px minmax(220px, 1.4fr); gap: 0 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #ECEFF2; background: #FFFFFF">
+<span><input type="checkbox" aria-label="Seleccionar Canche, Kathia (MEX, PAL, FI)"></span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Canche, Kathia (MEX, PAL, FI)</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">KCCMEXFI</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; word-break: break-all">MABE.AGENERICO.GENERICO/DM_GENERICO_REGIONSOCIEDAD</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5B6672; word-break: break-all">CON_GEN_DM_REGIONSOCIEDAD_GOV</span></div>
+<span style="text-align: right; font-family: 'IBM Plex Mono', monospace">809</span>
+<span style="color: #5B6672">—</span>
+<div style="display: flex; gap: 6px">
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Continúa</button>
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 36px; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #C2C9D1; background: #FFFFFF; color: #17212B">Baja</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<input type="text" value="" aria-label="Comentario para Canche, Kathia (MEX, PAL, FI)" placeholder="Opcional" style="min-height: 36px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; font-family: inherit; font-size: 13px; color: #17212B">
+<span style="display: none; font-size: 12px; color: #9A3412">La baja requiere comentario</span>
+</div>
+</div>
+
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px">
+<span style="font-size: 13px; color: #5B6672">Cada decisión se guarda al momento con tu usuario y fecha. Puedes cambiarla hasta el cierre del evento.</span>
+<button type="button" disabled style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: #9AA5B1; font-family: inherit; font-size: 14px; font-weight: 500; color: #FFFFFF">Confirmar certificación de mi macro área</button>
+</div>
+</section>
+</main>
+</div>
+</body></html>

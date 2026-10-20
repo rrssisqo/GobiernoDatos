@@ -1,0 +1,131 @@
+@page
+@model GobiernoDatos.Web.Pages.Calidad.IndexModel
+@{
+    ViewData["Title"] = "Calidad de datos";
+    ViewData["Nav"] = "calidad";
+    var t = Model.Tablero;
+    var conDatos = t.PorRegla.Where(r => r.Medicion is not null).ToList();
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Calidad de datos</h1>
+        <p>Resultados de reglas de Informatica · calidad = registros válidos ÷ registros evaluados</p>
+    </div>
+    <form method="get" class="acciones">
+        <label class="campo">Periodo
+            <select name="periodo" data-autosubmit>
+                @foreach (var p in Model.Periodos) { <option value="@p" selected="@(p == t.Periodo)">@Ui.Periodo(p)</option> }
+            </select>
+        </label>
+        <label class="campo">Gobierno
+            <select name="gob" data-autosubmit>
+                <option value="">Compañía</option>
+                @foreach (var g in Model.Gobiernos) { <option selected="@(Model.Gob == g)">@g</option> }
+            </select>
+        </label>
+        <a class="btn btn-primario" href="#cargar">Cargar resumen</a>
+    </form>
+</header>
+
+<section class="kpis" aria-label="Indicadores">
+    <div class="kpi">
+        <span class="etq">Calidad @(Model.Gob ?? "compañía")</span>
+        <span class="valor">@Ui.Calidad(t.Total.Calidad)</span>
+        <span class="nota">vs periodo anterior: @(t.DeltaVsAnterior is null ? "—" : (t.DeltaVsAnterior >= 0 ? "+" : "") + (t.DeltaVsAnterior.Value * 100).ToString("0.0") + " pts")</span>
+    </div>
+    <div class="kpi"><span class="etq">Registros evaluados</span><span class="valor">@Ui.Num(t.Total.Evaluados)</span></div>
+    <div class="kpi"><span class="etq">Registros con error</span><span class="valor">@Ui.Num(t.Total.Errores)</span></div>
+    <div class="kpi"><span class="etq">Reglas evaluadas</span><span class="valor">@t.ReglasEvaluadas</span><span class="nota">de @t.ReglasActivas reglas activas</span></div>
+</section>
+
+@if (t.ReglasEvaluadas == 0)
+{
+    <div class="aviso aviso-info">No hay resultados cargados para @Ui.Periodo(t.Periodo). Carga la salida de la vista de resumen de Informatica con el formulario de abajo.</div>
+}
+
+<div class="mitades">
+    <section class="panel" aria-labelledby="h-gob">
+        <div class="panel-cab"><h2 id="h-gob">Por gobierno</h2></div>
+        <table class="tabla">
+            <thead><tr><th>Gobierno de la regla</th><th class="derecha">Evaluados</th><th class="derecha">Errores</th><th class="derecha">Calidad</th></tr></thead>
+            <tbody>
+                @foreach (var g in t.PorGobierno)
+                {
+                    <tr><td>@g.Gobierno</td><td class="num">@Ui.Num(g.Medicion.Evaluados)</td><td class="num">@Ui.Num(g.Medicion.Errores)</td>
+                        <td class="num"><span class="celda @Ui.ClaseCalidad(g.Medicion.Calidad)">@Ui.Calidad(g.Medicion.Calidad)</span></td></tr>
+                }
+                <tr class="total"><td>@(Model.Gob ?? "Compañía")</td><td class="num">@Ui.Num(t.Total.Evaluados)</td><td class="num">@Ui.Num(t.Total.Errores)</td><td class="num">@Ui.Calidad(t.Total.Calidad)</td></tr>
+            </tbody>
+        </table>
+        <div class="panel-pie">Los niveles no son aditivos: el total se calcula como Σ válidos ÷ Σ evaluados.</div>
+    </section>
+    <section class="panel" aria-labelledby="h-cargar" id="cargar">
+        <form method="post" asp-page-handler="Cargar" asp-route-periodo="@t.Periodo" asp-route-gob="@Model.Gob" enctype="multipart/form-data" class="panel-cuerpo">
+            <h2 id="h-cargar">Cargar resumen de Informatica</h2>
+            <p class="ayuda">CSV con columnas <span class="mono">regla_codigo, nombre_csv, periodo, reg_evaluados, reg_errores</span>. La regla se identifica por código o por nombre del CSV; periodo en formato AAAAMM. Si la regla y el periodo ya existen, se reemplazan.</p>
+            <label class="campo">Archivo
+                <input type="file" name="archivo" accept=".csv,text/csv" required />
+            </label>
+            <div class="form-fila">
+                <a class="btn" href="~/plantillas/resumen_calidad.csv" download>Descargar plantilla</a>
+                <button type="submit" class="btn btn-primario">Cargar</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<section class="panel" aria-labelledby="h-reglas">
+    <div class="panel-cab"><h2 id="h-reglas">Por regla y fuente</h2></div>
+    <div class="tabla-scroll">
+        <table class="tabla">
+            <thead><tr><th>Regla</th><th class="col-nombre">Descripción</th><th>Objetos BW · vistas</th><th class="derecha">Evaluados</th><th class="derecha">Errores</th><th class="derecha">Calidad</th></tr></thead>
+            <tbody>
+                @foreach (var r in t.PorRegla)
+                {
+                    <tr>
+                        <td class="mono nowrap">@r.Codigo</td>
+                        <td>@r.Descripcion<span class="ayuda" style="display:block">@Ui.Texto(r.Gobierno, "[gobierno]")@(r.Dimension is null ? "" : " · " + r.Dimension)</span></td>
+                        <td>
+                            <span class="mono">@string.Join(", ", r.Objetos)</span>
+                            @if (r.Vistas.Count == 0) { <span class="ayuda" style="display:block">Sin vista relacionada</span> }
+                            @foreach (var v in r.Vistas) { <a asp-page="/Vistas/Index" asp-route-id="@v.VistaId" style="display:block">@v.Nombre</a> }
+                        </td>
+                        <td class="num">@Ui.Num(r.Medicion?.Evaluados)</td>
+                        <td class="num">@Ui.Num(r.Medicion?.Errores)</td>
+                        <td class="num">@if (r.Medicion is not null) { <span class="celda @Ui.ClaseCalidad(r.Medicion.Calidad)">@Ui.Calidad(r.Medicion.Calidad)</span> } else { <span class="sutil" style="font-family:'IBM Plex Sans',sans-serif">Sin resultado</span> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel" aria-labelledby="h-rechazos">
+    <div class="panel-cab">
+        <h2 id="h-rechazos">Rechazos de la última carga</h2>
+        <span class="sutil">@(t.FechaUltimaCarga is null ? "Sin cargas" : Ui.FechaHora(t.FechaUltimaCarga.Value))</span>
+    </div>
+    @if (t.Rechazos.Count == 0)
+    {
+        <div class="vacio">Sin rechazos.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla">
+                <thead><tr><th>Regla / CSV</th><th>Periodo</th><th>Motivo</th></tr></thead>
+                <tbody>
+                    @foreach (var r in t.Rechazos)
+                    {
+                        <tr>
+                            <td class="mono">@Ui.Texto(r.Fila.ReglaCodigo, "")<span class="secundario">@r.Fila.NombreCsv</span></td>
+                            <td class="mono">@r.Fila.Periodo</td>
+                            <td><span class="badge badge-error">@r.Motivo</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

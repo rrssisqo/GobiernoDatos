@@ -1,0 +1,153 @@
+<!doctype html><html lang='es'><head><meta charset='utf-8'><title>Vistas</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"><style>body{margin:0} a{color:#0E6B66} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+
+<div style="min-height: 0; display: flex; flex-wrap: wrap; background: #F4F5F7; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #17212B">
+<nav aria-label="Principal" style="flex: 0 0 232px; background: #17212B; padding: 24px 16px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box">
+<div style="color: #FFFFFF; font-weight: 600; font-size: 15px; padding: 0 12px 20px">Gobierno de Datos</div>
+<a href="Main.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Seguimiento semanal</a>
+<a href="DetalleDP.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Data products</a>
+<a href="Vistas.html" aria-current="page" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; background: #2C3A48; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 500">Vistas gobernadas</a>
+<a href="Calidad.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Calidad</a>
+<div style="color: #8B97A3; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 20px 12px 6px">Recertificación de accesos</div>
+<a href="Eventos.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Eventos</a>
+<a href="MiRecertificacion.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Mi recertificación</a>
+<a href="Bajas.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: #C9D2DB; text-decoration: none; font-size: 14px">Bajas y evidencia</a>
+</nav>
+<main style="flex: 1 1 640px; min-width: 0; padding: 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 600">Vistas gobernadas</h1>
+<p style="margin: 0; color: #5B6672; font-size: 14px">Inventario sincronizado desde la vista HANA de Recertificación</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px"><span style="font-size: 13px; color: #5B6672; align-self: center">Última sincronización: [fecha] · corrida [n]</span><button type="button" style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: #0E6B66; font-family: inherit; font-size: 14px; font-weight: 500; color: #FFFFFF">Sincronizar recertificación</button></div>
+</header><section aria-label="Indicadores" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px">
+<div style="background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; color: #5B6672">En la última recertificación</span>
+<span style="font-size: 30px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: #17212B">223</span>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; color: #5B6672">Asignadas a data product</span>
+<span style="font-size: 30px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: #17212B">109</span>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; color: #5B6672">Nuevas por clasificar</span>
+<span style="font-size: 30px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: #8A4B00">[n]</span>
+<span style="font-size: 12px; color: #5B6672">Sin data product ni responsable</span></div>
+<div style="background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; color: #5B6672">Fuera de la última recertificación</span>
+<span style="font-size: 30px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: #8A3412">[n]</span>
+<span style="font-size: 12px; color: #5B6672">Revisar si se retiran de su DP</span></div>
+</section>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+<section aria-label="Listado de vistas" style="flex: 1 1 640px; min-width: 0; background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; display: flex; flex-direction: column">
+<div style="display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid #DDE1E6">
+<button type="button" aria-pressed="true" style="min-height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid #0E6B66; background: transparent; font-family: inherit; font-size: 14px; font-weight: 600; color: #0E6B66">Todas <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">223</span></button><button type="button" aria-pressed="false" style="min-height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; font-family: inherit; font-size: 14px; font-weight: 400; color: #3E4955">Nuevas por clasificar <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">[n]</span></button><button type="button" aria-pressed="false" style="min-height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; font-family: inherit; font-size: 14px; font-weight: 400; color: #3E4955">Fuera de recertificación <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B6672">[n]</span></button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #DDE1E6">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672">Macro área<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>Todas</option><option>TI</option><option>Cadena de Valor</option><option>Datos Maestros Material</option><option>Finanzas</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672">Etapa<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>Todas</option><option>Por Iniciar</option><option>Escaneo Inicial</option><option>Completada</option></select></label>
+<label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672">Buscar<input type="search" placeholder="Vista o paquete" style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B; padding: 0 12px"></label>
+</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 900px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="color: #5B6672; font-size: 12px">
+<th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left; padding-left: 20px">Vista</th><th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left">Paquete</th><th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left">Macro área</th>
+<th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left">Data product</th><th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left">Etapa</th>
+<th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left; text-align: right">Accesos 3 meses</th><th scope="col" style="padding: 10px 12px; font-weight: 500; text-align: left; text-align: right">Usuarios</th>
+</tr></thead>
+<tbody><tr style="border-top: 1px solid #ECEFF2; background: #E3F1EF;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 500">CONTINENTAL_GENERICO_CALENDARIOFISCAL</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.AGENERICO.GENERICO</td>
+<td style="padding: 12px 12px; vertical-align: top">TI</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">3,544</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">3</td>
+</tr><tr style="border-top: 1px solid #ECEFF2;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 400">CONTINENTAL_ENTREGAS_ENTRANTES</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.CADENA_VALOR.ENTREGAS.ENTRANTES</td>
+<td style="padding: 12px 12px; vertical-align: top">Cadena de Valor</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1,440</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1</td>
+</tr><tr style="border-top: 1px solid #ECEFF2;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 400">CONTINENTAL_COMPRAS_GOVERNANCE</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.CADENA_VALOR.COMPRAS</td>
+<td style="padding: 12px 12px; vertical-align: top">Cadena de Valor</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">921</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1</td>
+</tr><tr style="border-top: 1px solid #ECEFF2;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 400">DM_MATERIAL</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.AGENERICO.GENERICO</td>
+<td style="padding: 12px 12px; vertical-align: top">Datos Maestros Material</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">869</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1</td>
+</tr><tr style="border-top: 1px solid #ECEFF2;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 400">CONTINENTAL_GENERICO_TIPOCAMBIO</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.AGENERICO.GENERICO</td>
+<td style="padding: 12px 12px; vertical-align: top">Finanzas</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">859</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1</td>
+</tr><tr style="border-top: 1px solid #ECEFF2;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 400">CONTINENTAL_COSTEADO_GOVERNANCE</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.CADENA_VALOR.INVENTARIOS.COSTEADO</td>
+<td style="padding: 12px 12px; vertical-align: top">Cadena de Valor</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">827</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1</td>
+</tr><tr style="border-top: 1px solid #ECEFF2;">
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; font-weight: 400">DM_GENERICO_REGIONSOCIEDAD</td>
+<td style="padding: 12px 12px; vertical-align: top; font-family: 'IBM Plex Mono', monospace; color: #5B6672; font-size: 12px">MABE.AGENERICO.GENERICO</td>
+<td style="padding: 12px 12px; vertical-align: top">TI</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[data product]</td>
+<td style="padding: 12px 12px; vertical-align: top; color: #5B6672">[etapa]</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">809</td>
+<td style="padding: 12px 12px; vertical-align: top; text-align: right; font-family: 'IBM Plex Mono', monospace">1</td>
+</tr></tbody>
+</table>
+</div>
+<p style="margin: 0; padding: 12px 20px; font-size: 12px; color: #5B6672">Accesos de los últimos 3 meses sumados de todos los usuarios con el rol de la vista.</p>
+</section>
+
+<aside aria-labelledby="h-sel" style="flex: 0 1 380px; min-width: 300px; background: #FFFFFF; border: 1px solid #DDE1E6; border-radius: 8px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 12px; color: #5B6672">Vista seleccionada</span>
+<h2 id="h-sel" style="margin: 0; font-size: 16px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; word-break: break-all">CONTINENTAL_GENERICO_CALENDARIOFISCAL</h2>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; background: #F8F9FA; border-radius: 6px; padding: 12px">
+<span style="font-size: 12px; font-weight: 600; color: #3E4955">De la recertificación · solo lectura</span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B6672">Ruta técnica</span><span style="font-size: 13px; font-family: 'IBM Plex Mono', monospace; word-break: break-all">"_SYS_BIC"."MABE.AGENERICO.GENERICO/CONTINENTAL_GENERICO_CALENDARIOFISCAL"</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B6672">Rol HANA</span><span style="font-size: 13px; font-family: 'IBM Plex Mono', monospace; word-break: break-all">CON_GEN_CALENDARIO_FISCAL_GOVERNANCE</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B6672">Macro área</span><span style="font-size: 13px; ; word-break: break-all">TI</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B6672">Uso</span><span style="font-size: 13px; ; word-break: break-all">3,544 accesos en 3 meses · 3 usuarios</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; font-weight: 600; color: #3E4955">Gobierno · editable</span>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672; font-size: 13px">Data product<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>[data product]</option><option>Sin asignar</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672; font-size: 13px">Responsable de la vista<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>[responsable]</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6672; font-size: 13px">Nivel de seguridad<select style="min-height: 40px; padding: 0 10px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B"><option>Interno/Confidencial</option><option>Restringido/Privado</option></select></label>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #DDE1E6; padding-top: 16px">
+<span style="font-size: 12px; font-weight: 600; color: #3E4955">Etapa</span>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">[etapa actual]</span><span style="font-size: 12px; color: #5B6672">Pendiente: [tarea] · [n] días en la etapa</span></div>
+<button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B; min-height: 36px; font-size: 13px">Mover de etapa</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #DDE1E6; padding-top: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 12px; font-weight: 600; color: #3E4955">Objetos BW y reglas</span><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #C2C9D1; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #17212B; min-height: 32px; font-size: 13px">Relacionar objeto</button></div>
+<div style="border: 1px solid #DDE1E6; border-radius: 6px; padding: 10px 12px; display: flex; justify-content: space-between; font-size: 13px"><span style="font-family: 'IBM Plex Mono', monospace">[objeto BW]</span><a href="Calidad.html" style="text-decoration: none">[n] reglas</a></div>
+</div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: #0E6B66; font-family: inherit; font-size: 14px; font-weight: 500; color: #FFFFFF">Guardar cambios</button>
+</aside>
+</div>
+</main>
+</div>
+</body></html>

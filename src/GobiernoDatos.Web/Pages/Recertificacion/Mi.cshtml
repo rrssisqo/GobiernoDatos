@@ -1,0 +1,244 @@
+@page
+@model GobiernoDatos.Web.Pages.Recertificacion.MiModel
+@{
+    ViewData["Title"] = "Mi recertificación";
+    ViewData["Nav"] = "mi";
+    var d = Model.Datos;
+    var e = d.Evento;
+    var abierto = e?.Estatus == EstatusEvento.ABIERTO;
+    var total = d.Accesos.Count;
+    var decididos = d.Accesos.Count(a => a.Decision is not null);
+}
+
+@Html.AntiForgeryToken()
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Mi recertificación</h1>
+        <p>@(e is null ? "Sin eventos" : e.Nombre) · Macro área: @(d.MacroAreas.Count == 0 ? "—" : string.Join(", ", d.MacroAreas.Select(m => m.MacroArea))) · Fecha límite: @Ui.Fecha(e?.FechaLimite)</p>
+    </div>
+    @if (total > 0)
+    {
+        <div class="progreso" aria-live="polite">
+            <span><strong id="n-decididos">@decididos</strong> de @total accesos decididos</span>
+            <div class="barra"><span id="barra-avance" style="width:@(total == 0 ? 0 : decididos * 100 / total)%"></span></div>
+        </div>
+    }
+</header>
+
+@if (e is null || d.MacroAreas.Count == 0)
+{
+    <div class="panel"><div class="vacio">No tienes accesos por certificar en el evento actual.</div></div>
+}
+else
+{
+    @if (!abierto)
+    {
+        <div class="aviso aviso-aviso">El evento @e.Nombre está @ReglasRecertificacion.Etiqueta(e.Estatus).ToLowerInvariant(): las decisiones son de solo lectura.</div>
+    }
+    <div class="aviso aviso-info" role="note">
+        Indica si cada usuario debe <strong>continuar</strong> con acceso a la vista o si el acceso debe darse de <strong>baja</strong>.
+        La baja retira el rol de la vista al usuario y requiere un comentario para la auditoría.
+    </div>
+
+    <section class="panel" aria-label="Accesos por certificar">
+        <div class="panel-cab">
+            <div class="form-fila compacto" style="flex:1 1 auto">
+                <label class="campo">Vista
+                    <select id="f-vista">
+                        <option value="">Todas</option>
+                        @foreach (var v in d.Accesos.Select(a => a.Vista).Distinct()) { <option value="@v">@RutaTecnica.Vista(v)</option> }
+                    </select>
+                </label>
+                <label class="campo">Decisión
+                    <select id="f-decision">
+                        <option value="">Todas</option>
+                        <option value="PENDIENTE">Pendientes</option>
+                        <option value="CONTINUA">Continúa</option>
+                        <option value="BAJA">Baja</option>
+                    </select>
+                </label>
+                <label class="campo">Usuario
+                    <input type="search" id="f-usuario" placeholder="Nombre o código" />
+                </label>
+            </div>
+            @if (abierto)
+            {
+                <form method="post" asp-page-handler="Masivo" id="form-masivo">
+                    <button type="submit" class="btn">Marcar pendientes como Continúa</button>
+                </form>
+            }
+        </div>
+
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-accesos">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="sel-todos" aria-label="Seleccionar todos" disabled="@(!abierto)" /></th>
+                        <th class="col-nombre">Usuario</th>
+                        <th>Vista · rol</th>
+                        <th class="derecha">Accesos 3 meses</th>
+                        <th>Evento anterior</th>
+                        <th>Decisión</th>
+                        <th>Comentario</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in d.Accesos)
+                    {
+                        var bloqueado = !abierto || a.BajaEjecutada;
+                        <tr data-acceso="@a.AccesoId" data-vista="@a.Vista" data-decision="@(a.Decision?.ToString() ?? "PENDIENTE")"
+                            data-texto="@a.UsuarioNombre @a.UsuarioCodigo" data-comentario="@a.Comentario">
+                            <td><input type="checkbox" class="sel" aria-label="Seleccionar @a.UsuarioNombre" disabled="@bloqueado" /></td>
+                            <td>@a.UsuarioNombre<span class="secundario">@a.UsuarioCodigo</span></td>
+                            <td class="ruta"><span class="mono" style="font-size:12px">@a.Vista</span><span class="secundario">@a.Rol</span></td>
+                            <td class="num">@Ui.Num(a.Accesos3m)</td>
+                            <td>@(a.Anterior is null ? "—" : ReglasRecertificacion.Etiqueta(a.Anterior.Value))</td>
+                            <td>
+                                <div class="decision" role="group" aria-label="Decisión para @a.UsuarioNombre">
+                                    <button type="button" data-decision="CONTINUA" aria-pressed="@(a.Decision == Decision.CONTINUA ? "true" : "false")" disabled="@bloqueado">Continúa</button>
+                                    <button type="button" data-decision="BAJA" aria-pressed="@(a.Decision == Decision.BAJA ? "true" : "false")" disabled="@bloqueado">Baja</button>
+                                </div>
+                                @if (a.BajaEjecutada) { <span class="ayuda" style="display:block">Baja ejecutada</span> }
+                            </td>
+                            <td>
+                                <div class="comentario-celda">
+                                    <input type="text" value="@a.Comentario" maxlength="1000" aria-label="Comentario para @a.UsuarioNombre"
+                                           placeholder="@(a.Decision == Decision.BAJA ? "Obligatorio en Baja" : "Opcional")" disabled="@bloqueado" />
+                                    <span class="error oculto">La baja requiere comentario</span>
+                                    <span class="guardado oculto">Guardado</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <div class="vacio oculto" id="sin-resultados">Ningún acceso coincide con los filtros.</div>
+        </div>
+
+        <div class="panel-pie">
+            <span>Cada decisión se guarda al momento con tu usuario y fecha. Puedes cambiarla hasta el cierre del evento.</span>
+            <div class="acciones">
+                @foreach (var m in d.MacroAreas)
+                {
+                    if (m.Confirmada)
+                    {
+                        <span class="badge badge-ok">@m.MacroArea confirmada</span>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="Confirmar" class="inline">
+                            <input type="hidden" name="macroAreaId" value="@m.MacroAreaId" />
+                            <button type="submit" class="btn btn-primario confirmar" data-macro="@m.MacroArea" disabled="@(!abierto || m.Conteo.Pendientes > 0)">
+                                Confirmar certificación@(d.MacroAreas.Count > 1 ? " de " + m.MacroArea : " de mi macro área")
+                            </button>
+                        </form>
+                    }
+                }
+            </div>
+        </div>
+    </section>
+}
+
+@section Scripts {
+<script>
+(() => {
+    const tabla = document.getElementById('tabla-accesos');
+    if (!tabla) return;
+    const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+    const filas = [...tabla.tBodies[0].rows];
+    const total = filas.length;
+    const fVista = document.getElementById('f-vista'), fDecision = document.getElementById('f-decision'), fUsuario = document.getElementById('f-usuario');
+
+    function filtrar() {
+        const q = fUsuario.value.trim().toLowerCase();
+        let visibles = 0;
+        for (const tr of filas) {
+            const ok = (!fVista.value || tr.dataset.vista === fVista.value)
+                && (!fDecision.value || tr.dataset.decision === fDecision.value)
+                && (!q || tr.dataset.texto.toLowerCase().includes(q));
+            tr.classList.toggle('oculto', !ok);
+            if (ok) visibles++;
+        }
+        document.getElementById('sin-resultados').classList.toggle('oculto', visibles > 0);
+    }
+    [fVista, fDecision].forEach(el => el.addEventListener('change', filtrar));
+    fUsuario.addEventListener('input', filtrar);
+
+    function progreso() {
+        const n = filas.filter(tr => tr.dataset.decision !== 'PENDIENTE').length;
+        document.getElementById('n-decididos').textContent = n;
+        document.getElementById('barra-avance').style.width = (total ? n * 100 / total : 0) + '%';
+        // La confirmación final la valida el servidor por macro área; aquí solo se habilita cuando ya no hay pendientes visibles.
+        document.querySelectorAll('button.confirmar').forEach(b => b.disabled = n < total);
+    }
+
+    function marcar(tr, decision) {
+        tr.dataset.decision = decision;
+        tr.querySelectorAll('.decision button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.decision === decision)));
+        tr.querySelector('.comentario-celda input').placeholder = decision === 'BAJA' ? 'Obligatorio en Baja' : 'Opcional';
+    }
+
+    async function guardar(tr, decision) {
+        const input = tr.querySelector('.comentario-celda input');
+        const error = tr.querySelector('.error'), ok = tr.querySelector('.guardado');
+        if (decision === 'BAJA' && !input.value.trim()) {
+            tr.dataset.pendiente = 'BAJA';
+            tr.classList.add('requiere-comentario');
+            error.textContent = 'La baja requiere comentario';
+            error.classList.remove('oculto');
+            input.focus();
+            return;
+        }
+        const body = new URLSearchParams({ accesoId: tr.dataset.acceso, decision, comentario: input.value, __RequestVerificationToken: token });
+        const r = await fetch('?handler=Decidir', { method: 'POST', body });
+        const data = await r.json().catch(() => ({ ok: false, error: 'No se pudo guardar.' }));
+        if (!data.ok) {
+            error.textContent = data.error; error.classList.remove('oculto');
+            return;
+        }
+        delete tr.dataset.pendiente;
+        tr.dataset.comentario = input.value.trim();
+        tr.classList.remove('requiere-comentario');
+        error.classList.add('oculto');
+        ok.classList.remove('oculto');
+        setTimeout(() => ok.classList.add('oculto'), 1500);
+        marcar(tr, data.decision);
+        progreso();
+    }
+
+    tabla.addEventListener('click', e => {
+        const b = e.target.closest('.decision button');
+        if (b && !b.disabled) guardar(b.closest('tr'), b.dataset.decision);
+    });
+
+    // Al terminar de escribir el comentario: completa una Baja pendiente o actualiza el comentario de la decisión vigente.
+    tabla.addEventListener('change', e => {
+        if (!e.target.matches('.comentario-celda input')) return;
+        const tr = e.target.closest('tr');
+        if (tr.dataset.pendiente) guardar(tr, tr.dataset.pendiente);
+        else if (tr.dataset.decision !== 'PENDIENTE' && e.target.value.trim() !== (tr.dataset.comentario || '')) guardar(tr, tr.dataset.decision);
+    });
+
+    document.getElementById('sel-todos').addEventListener('change', e => {
+        filas.filter(tr => !tr.classList.contains('oculto')).forEach(tr => { const c = tr.querySelector('.sel'); if (!c.disabled) c.checked = e.target.checked; });
+    });
+
+    const masivo = document.getElementById('form-masivo');
+    masivo?.addEventListener('submit', e => {
+        const seleccion = filas.filter(tr => tr.querySelector('.sel').checked);
+        const base = seleccion.length ? seleccion : filas.filter(tr => !tr.classList.contains('oculto'));
+        const ids = base.filter(tr => tr.dataset.decision === 'PENDIENTE').map(tr => tr.dataset.acceso);
+        if (!ids.length) { e.preventDefault(); alert('No hay accesos pendientes en la selección.'); return; }
+        if (!confirm(`Se registrará «Continúa» en ${ids.length} accesos pendientes${seleccion.length ? ' seleccionados' : ' visibles'}. Cada uno queda registrado de forma individual. ¿Continuar?`)) { e.preventDefault(); return; }
+        // Un solo campo con los ids separados por coma: con miles de accesos, un campo por acceso excede el límite de formularios.
+        masivo.querySelectorAll('input[name=ids]').forEach(i => i.remove());
+        const campo = document.createElement('input'); campo.type = 'hidden'; campo.name = 'ids'; campo.value = ids.join(','); masivo.appendChild(campo);
+    });
+
+    window.addEventListener('beforeunload', e => {
+        if (filas.some(tr => tr.dataset.pendiente)) { e.preventDefault(); e.returnValue = ''; }
+    });
+})();
+</script>
+}

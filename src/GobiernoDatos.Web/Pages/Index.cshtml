@@ -1,0 +1,237 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Seguimiento semanal";
+    ViewData["Nav"] = "seguimiento";
+    var t = Model.Tablero;
+    var grupos = Catalogos.Rubros.OrderBy(r => r.Orden).GroupBy(r => r.GrupoResponsable).ToList();
+    string ClaseGrupo(string g) => g switch { "Owner" => "g-owner", "Funcional" => "g-funcional", _ => "g-of" };
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Seguimiento semanal</h1>
+        <p>Avance de cada data product al cierre de la semana seleccionada</p>
+    </div>
+    <form method="get" class="acciones">
+        @if (Model.Gob is not null) { <input type="hidden" name="gob" value="@Model.Gob" /> }
+        <label class="campo">Semana
+            <select name="semana" data-autosubmit>
+                @foreach (var s in Model.Semanas)
+                {
+                    <option value="@s.Id" selected="@(s.Id == t.Semana.Id)">@s.Etiqueta · @s.Rango()</option>
+                }
+            </select>
+        </label>
+        <button type="button" class="btn" id="btn-cargar" aria-expanded="false" aria-controls="panel-cargar">Cargar archivo</button>
+        <a class="btn" asp-page-handler="Exportar" asp-route-semana="@t.Semana.Id" asp-route-gob="@Model.Gob">Exportar a Excel</a>
+        <a class="btn btn-primario" asp-page="/DataProducts/Index">Registrar avance</a>
+    </form>
+</header>
+
+<section class="panel oculto" id="panel-cargar" aria-labelledby="h-cargar">
+    <form method="post" asp-page-handler="Importar" enctype="multipart/form-data" class="panel-cuerpo" id="form-cargar">
+        <h2 id="h-cargar">Cargar archivo de seguimiento</h2>
+        <p class="ayuda">Archivo de Excel de seguimiento (<strong>.xlsx</strong>; también se acepta CSV) con las columnas Gobierno, Data Product, Vistas, Glosarios, Catalogado, DF, Arq.,
+           Linaje, Perfil, Reglas de Calidad, Comentarios). Crea los data products que no existan, registra los avances que cambiaron y separa los
+           comentarios por semana («42/26 - … 41/26 - …»). Se puede volver a cargar cada semana sin duplicar.</p>
+        <div class="form-fila">
+            <label class="campo">Semana de corte
+                <select name="semanaCorte">
+                    @for (var i = 0; i < Model.SemanasCorte.Count; i++)
+                    {
+                        var s = Model.SemanasCorte[i];
+                        <option value="@s.Id" selected="@(i == 1)">@s.Etiqueta · @s.Rango()</option>
+                    }
+                </select>
+            </label>
+            <label class="campo" style="flex:3 1 280px">Archivo <input type="file" name="archivo" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required /></label>
+        </div>
+        <div class="form-fila" style="justify-content:flex-start">
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">Cargar</button>
+            <button type="button" class="btn" id="btn-cancelar-carga" style="flex:0 0 auto">Cancelar</button>
+        </div>
+    </form>
+</section>
+
+<section class="kpis" aria-label="Indicadores">
+    <div class="kpi">
+        <span class="etq">Avance global</span>
+        <span class="valor">@Ui.Pct(t.AvanceGlobal)</span>
+        <span class="nota">Promedio de data products activos</span>
+    </div>
+    <div class="kpi">
+        <span class="etq">Vistas en data products</span>
+        <span class="valor">@t.VistasEnDp</span>
+        <span class="nota">de @t.VistasInventario en inventario</span>
+    </div>
+    <div class="kpi">
+        <span class="etq">Data products al 100%</span>
+        <span class="valor">@t.DpCompletos.Count</span>
+        <span class="nota">@(t.DpCompletos.Count == 0 ? "Ninguno todavía" : string.Join(", ", t.DpCompletos))</span>
+    </div>
+    <div class="kpi">
+        <span class="etq">Rubros pendientes</span>
+        <span class="valor">@t.RubrosPendientes</span>
+        <span class="nota">de @t.RubrosTotales en los data products listados</span>
+    </div>
+</section>
+
+<section class="panel" aria-label="Avance por data product">
+    <div class="panel-cab">
+        <div class="chips" aria-label="Filtrar por gobierno">
+            <a class="chip" asp-route-semana="@t.Semana.Id" aria-pressed="@(Model.Gob is null ? "true" : "false")">Todos</a>
+            @foreach (var g in Model.Gobiernos)
+            {
+                <a class="chip" asp-route-semana="@t.Semana.Id" asp-route-gob="@g" aria-pressed="@(Model.Gob == g ? "true" : "false")">@g</a>
+            }
+        </div>
+        <label class="campo en-linea compacto">Buscar
+            <input type="search" placeholder="Data product" data-filtro-tabla="#tabla-seguimiento" style="width:220px" />
+        </label>
+    </div>
+
+    @if (t.Filas.Count == 0)
+    {
+        <div class="vacio">No hay data products para esta semana.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla tabla-seguimiento" id="tabla-seguimiento">
+                <thead>
+                    <tr class="grupos">
+                        <th colspan="5"></th>
+                        @foreach (var g in grupos)
+                        {
+                            <th colspan="@g.Count()" class="rubro"><div class="grupo @ClaseGrupo(g.Key)">@g.Key</div></th>
+                        }
+                        <th></th>
+                    </tr>
+                    <tr>
+                        <th><span class="oculto-visual">Acciones</span></th>
+                        <th>Gobierno</th>
+                        <th class="col-nombre">Data product</th>
+                        <th>Avance</th>
+                        <th class="derecha">Vistas</th>
+                        @foreach (var r in grupos.SelectMany(g => g))
+                        {
+                            <th class="rubro" title="@r.Nombre (@(r.Nivel == NivelRubro.DP ? "nivel data product" : "nivel vista"))">@r.Corto</th>
+                        }
+                        <th>Nota de la semana</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in t.Filas)
+                    {
+                        <tr data-texto="@f.DataProduct @f.Gobierno">
+                            <td class="acciones-fila">
+                                <button type="button" class="btn btn-chico" data-editar-dp="@f.DpId" data-nombre="@f.DataProduct" data-gobierno="@f.Gobierno"
+                                        data-responsable="@Model.ResponsablePorDp.GetValueOrDefault(f.DpId)" title="Editar data product">Editar</button>
+                                <form method="post" asp-page-handler="Eliminar" asp-route-semana="@t.Semana.Id" asp-route-gob="@Model.Gob" class="inline"
+                                      data-confirmar="¿Eliminar el data product «@f.DataProduct»? Se borrarán también sus avances, sus comentarios por semana y la asignación de sus vistas (las vistas siguen en el inventario). Esta acción no se puede deshacer.">
+                                    <input type="hidden" name="dpId" value="@f.DpId" />
+                                    <button type="submit" class="btn btn-chico btn-peligro" title="Eliminar data product">Eliminar</button>
+                                </form>
+                            </td>
+                            <td class="sutil">@f.Gobierno</td>
+                            <td>
+                                <a asp-page="/DataProducts/Detalle" asp-route-id="@f.DpId" asp-route-semana="@t.Semana.Id">@f.DataProduct</a>
+                                @if (f.Estatus == "CERRADO") { <span class="badge">Cerrado</span> }
+                            </td>
+                            <td>
+                                <div class="avance">
+                                    <span class="mono">@Ui.Pct(f.Avance)</span>
+                                    <div class="barra"><span style="width:@Math.Min(100, Math.Round(f.Avance))%"></span></div>
+                                </div>
+                            </td>
+                            <td class="num">@f.Vistas</td>
+                            @foreach (var r in grupos.SelectMany(g => g))
+                            {
+                                var pct = f.Rubros.First(c => c.RubroId == r.RubroId).Pct;
+                                <td class="rubro"><span class="celda @Ui.ClaseRubro(pct)">@Ui.Pct(pct)</span></td>
+                            }
+                            <td>
+                                <div class="nota-semana" title="@f.Nota">
+                                    @if (f.NotaSemana is not null) { <span class="sutil mono">@f.NotaSemana ·</span> }
+                                    @Ui.Texto(f.Nota, "—")
+                                </div>
+                                @if (f.Historial.Count > 1)
+                                {
+                                    <details class="historial-notas">
+                                        <summary>Comentarios por semana (@f.Historial.Count)</summary>
+                                        <ul>
+                                            @foreach (var n in f.Historial)
+                                            {
+                                                <li><span class="mono">@n.Semana.Etiqueta</span> @n.Texto</li>
+                                            }
+                                        </ul>
+                                    </details>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="panel-pie">
+        <div class="leyenda">
+            <span><i class="c-ok"></i>100% o no aplica</span>
+            <span><i class="c-medio"></i>50–99%</span>
+            <span><i class="c-bajo"></i>1–49%</span>
+            <span><i class="c-cero"></i>No iniciado</span>
+        </div>
+        <span>Avance = promedio ponderado de los 7 rubros · sin dato = 0%</span>
+    </div>
+</section>
+
+<dialog id="dlg-editar" class="dialogo" aria-labelledby="h-editar">
+    <form method="post" asp-page-handler="Editar" asp-route-semana="@t.Semana.Id" asp-route-gob="@Model.Gob" id="form-editar"
+          data-confirmar="¿Guardar los cambios del data product?">
+        <h2 id="h-editar">Editar data product</h2>
+        <p class="ayuda">Solo cambia los datos del data product; sus avances y comentarios se conservan.</p>
+        <input type="hidden" name="dpId" />
+        <label class="campo">Nombre <input type="text" name="nombre" required maxlength="200" /></label>
+        <label class="campo">Gobierno
+            <select name="gobierno" required>
+                @foreach (var g in Model.CatalogoGobiernos) { <option value="@g">@g</option> }
+            </select>
+        </label>
+        <label class="campo">Responsable <input type="text" name="responsable" list="lista-responsables" maxlength="200" /></label>
+        <datalist id="lista-responsables">@foreach (var r in Model.Responsables) { <option value="@r"></option> }</datalist>
+        <div class="form-fila" style="justify-content:flex-end">
+            <button type="button" class="btn" id="btn-cancelar-editar" style="flex:0 0 auto">Cancelar</button>
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">Guardar</button>
+        </div>
+    </form>
+</dialog>
+
+@section Scripts {
+<script>
+(() => {
+    const panel = document.getElementById('panel-cargar'), boton = document.getElementById('btn-cargar');
+    const alternar = abrir => { panel.classList.toggle('oculto', !abrir); boton.setAttribute('aria-expanded', String(abrir)); if (abrir) panel.scrollIntoView({ block: 'nearest' }); };
+    boton.addEventListener('click', () => alternar(panel.classList.contains('oculto')));
+    document.getElementById('btn-cancelar-carga').addEventListener('click', () => alternar(false));
+    // Editar data product: llena el diálogo con los datos de la fila.
+    const dlg = document.getElementById('dlg-editar'), fe = document.getElementById('form-editar');
+    document.querySelectorAll('[data-editar-dp]').forEach(b => b.addEventListener('click', () => {
+        fe.elements.dpId.value = b.dataset.editarDp;
+        fe.elements.nombre.value = b.dataset.nombre;
+        const gob = fe.elements.gobierno;
+        if (![...gob.options].some(o => o.value === b.dataset.gobierno)) gob.add(new Option(b.dataset.gobierno, b.dataset.gobierno));
+        gob.value = b.dataset.gobierno;
+        fe.elements.responsable.value = b.dataset.responsable || '';
+        dlg.showModal();
+        fe.elements.nombre.focus();
+    }));
+    document.getElementById('btn-cancelar-editar').addEventListener('click', () => dlg.close());
+    document.getElementById('form-cargar').addEventListener('submit', e => {
+        const b = e.target.querySelector('button[type=submit]');
+        setTimeout(() => { if (!e.defaultPrevented) { b.disabled = true; b.textContent = 'Cargando…'; } }, 0);
+    });
+})();
+</script>
+}

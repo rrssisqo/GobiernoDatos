@@ -1,0 +1,124 @@
+@page
+@model GobiernoDatos.Web.Pages.Tareas.IndexModel
+@{
+    ViewData["Title"] = "Seguimiento tarea";
+    ViewData["Nav"] = "tareas";
+    string ClaseDias(FilaTarea t) => t.Estatus != EstatusTarea.Abierta ? "c-cero" : t.DiasTranscurridos > 14 ? "c-bajo" : t.DiasTranscurridos > 7 ? "c-medio" : "c-ok";
+    string ClaseEstatus(string e) => e == EstatusTarea.Abierta ? "badge-aviso" : e == EstatusTarea.Terminada ? "badge-ok" : "badge-neutro";
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Seguimiento tarea</h1>
+        <p>Tareas de la etapa de cada vista, asignadas a un usuario · los días se congelan al cerrar la tarea</p>
+    </div>
+    <form method="get" class="acciones">
+        <label class="campo">Estatus
+            <select name="estatus" data-autosubmit>
+                <option value="ABIERTA" selected="@(Model.EstatusEfectivo == "ABIERTA")">Abiertas</option>
+                <option value="TERMINADA" selected="@(Model.EstatusEfectivo == "TERMINADA")">Terminadas</option>
+                <option value="CANCELADA" selected="@(Model.EstatusEfectivo == "CANCELADA")">Canceladas</option>
+                <option value="TODAS" selected="@(Model.EstatusEfectivo == "TODAS")">Todas</option>
+            </select>
+        </label>
+        <label class="campo">Data product
+            <select name="dp" data-autosubmit>
+                <option value="">Todos</option>
+                @foreach (var d in Model.DataProducts) { <option value="@d.DpId" selected="@(Model.Dp == d.DpId)">@d.Nombre</option> }
+            </select>
+        </label>
+        <label class="campo en-linea" style="align-self:center">
+            <input type="checkbox" name="mias" value="true" checked="@Model.Mias" data-autosubmit-check /> Solo mis tareas
+        </label>
+    </form>
+</header>
+
+<section class="kpis" aria-label="Indicadores">
+    <div class="kpi"><span class="etq">Tareas abiertas</span><span class="valor">@Model.Abiertas</span></div>
+    <div class="kpi"><span class="etq">Asignadas a mí</span><span class="valor">@Model.MiasAbiertas</span><span class="nota">abiertas</span></div>
+    <div class="kpi"><span class="etq">Terminadas</span><span class="valor">@Model.Terminadas</span></div>
+    <div class="kpi"><span class="etq">Días promedio abiertas</span><span class="valor">@(Model.DiasPromedioAbiertas is null ? "—" : Model.DiasPromedioAbiertas.Value.ToString("0.#"))</span></div>
+</section>
+
+<section class="panel" aria-label="Tareas">
+    <div class="panel-cab">
+        <h2>@(Model.EstatusEfectivo == "TODAS" ? "Todas las tareas" : EstatusTarea.Etiqueta(Model.EstatusEfectivo) + "s")</h2>
+        <label class="campo en-linea compacto">Buscar
+            <input type="search" placeholder="Vista, data product o usuario" data-filtro-tabla="#tabla-tareas" style="width:240px" />
+        </label>
+    </div>
+    @if (Model.Filas.Count == 0)
+    {
+        <div class="vacio">No hay tareas con estos filtros. Las tareas se asignan desde Vistas gobernadas, en el bloque de etapa.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-tareas">
+                <thead>
+                    <tr>
+                        <th>Data product</th><th class="col-nombre">Vista</th><th>Usuario asignado</th><th>Etapa</th>
+                        <th>Asignada</th><th>Estatus</th><th class="derecha">Días transcurridos</th><th>Terminada</th><th class="centro">Terminar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Model.Filas)
+                    {
+                        <tr data-texto="@t.Vista @t.DataProduct @t.AsignadoNombre @t.AsignadoA" class="@(Model.EsMia(t) && t.Estatus == EstatusTarea.Abierta ? "seleccionada" : "")">
+                            <td>@Ui.Texto(t.DataProduct, "Sin asignar")</td>
+                            <td><a asp-page="/Vistas/Index" asp-route-id="@t.VistaId">@t.Vista</a></td>
+                            <td>@t.AsignadoNombre<span class="secundario">@t.AsignadoA</span></td>
+                            <td>@t.Etapa</td>
+                            <td class="nowrap">@Ui.FechaHora(t.FechaAsignacion)</td>
+                            <td>
+                                <span class="badge @ClaseEstatus(t.Estatus)">@EstatusTarea.Etiqueta(t.Estatus)</span>
+                                @if (t.MotivoCierre is not null) { <span class="ayuda" style="display:block">@t.MotivoCierre</span> }
+                            </td>
+                            <td class="num"><span class="celda @ClaseDias(t)" title="@(t.Estatus == EstatusTarea.Abierta ? "Desde la asignación hasta hoy" : "Congelado al cerrar")">@t.DiasTranscurridos</span></td>
+                            <td class="nowrap">
+                                @if (t.FechaCierre is not null)
+                                {
+                                    @Ui.FechaHora(t.FechaCierre.Value)<span class="secundario">@t.CerradoPor</span>
+                                }
+                                else { <span class="sutil">—</span> }
+                            </td>
+                            <td class="centro">
+                                @if (t.Estatus == EstatusTarea.Abierta)
+                                {
+                                    <form method="post" asp-page-handler="Terminar" asp-route-estatus="@Model.Estatus" asp-route-mias="@(Model.Mias ? "true" : null)" asp-route-dp="@Model.Dp" class="inline">
+                                        <input type="hidden" name="tareaId" value="@t.TareaId" />
+                                        <input type="checkbox" class="check-terminar" aria-label="Marcar como terminada la tarea de @t.Vista"
+                                               data-mensaje="¿Marcar como terminada la tarea «@t.Etapa» de @t.Vista? Se guardará la fecha de hoy y los días quedarán congelados." />
+                                    </form>
+                                }
+                                else if (t.Estatus == EstatusTarea.Terminada) { <span title="Terminada">✓</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <div class="panel-pie">
+        <div class="leyenda">
+            <span><i class="c-ok"></i>0–7 días</span>
+            <span><i class="c-medio"></i>8–14 días</span>
+            <span><i class="c-bajo"></i>Más de 14 días</span>
+            <span><i class="c-cero"></i>Cerrada (días congelados)</span>
+        </div>
+        <span>Días transcurridos = desde la asignación hasta hoy, o hasta el cierre.</span>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+(() => {
+    // Check de terminado: confirma y envía; si se cancela, se desmarca.
+    document.querySelectorAll('.check-terminar').forEach(c => c.addEventListener('change', () => {
+        if (!c.checked) return;
+        if (confirm(c.dataset.mensaje)) c.form.submit(); else c.checked = false;
+    }));
+    document.querySelectorAll('[data-autosubmit-check]').forEach(c => c.addEventListener('change', () => c.form.submit()));
+})();
+</script>
+}
