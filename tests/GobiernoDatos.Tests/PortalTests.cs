@@ -163,8 +163,8 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", r.Content.Headers.ContentType!.MediaType);
         using var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(await r.Content.ReadAsByteArrayAsync()));
         var hoja = libro.Worksheet(1);
-        Assert.Equal(GobiernoDatos.Web.Pages.Auditoria.IndexModel.ColumnasHana, Enumerable.Range(1, 12).Select(i => hoja.Cell(1, i).GetString()));
-        Assert.Contains(Enumerable.Range(2, 50), i => hoja.Cell(i, 7).GetString() != "");   // GOBIERNO del extracto
+        Assert.Equal(GobiernoDatos.Web.Pages.Auditoria.IndexModel.ColumnasHana, Enumerable.Range(1, 9).Select(i => hoja.Cell(1, i).GetString()));
+        Assert.All(Enumerable.Range(2, hoja.LastRowUsed()!.RowNumber() - 1), i => Assert.Equal("", hoja.Cell(i, 8).GetString()));   // OKBAJA vacía
         var total = hoja.LastRowUsed()!.RowNumber() - 1;
         Assert.Contains($"de {total:N0} accesos", html);
 
@@ -181,15 +181,17 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
             using var l = new ClosedXML.Excel.XLWorkbook(s);
             var h = l.Worksheet(1);
             var filas = h.LastRowUsed()!.RowNumber() - 1;
-            Assert.All(Enumerable.Range(2, filas), i => Assert.Equal(h.Cell(2, 8).GetString(), h.Cell(i, 8).GetString()));   // un solo AREARESPONSABLE
+            Assert.All(Enumerable.Range(2, filas), i => Assert.Equal(h.Cell(2, 7).GetString(), h.Cell(i, 7).GetString()));   // un solo AREARESPONSABLE
             suma += filas;
         }
         Assert.Equal(total, suma);
 
-        // Filtro por decisión: solo pendientes.
-        html = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria?evento=0&decision=PENDIENTE"));
-        Assert.DoesNotContain("badge-ok\">OK", html);
         Assert.Contains("<th>OKBAJA</th>", html);
+        Assert.DoesNotContain("<th>COMENTARIOS</th>", html);
+        Assert.DoesNotContain("name=\"decision\"", html);
+        Assert.DoesNotContain("class=\"kpis\"", html);
+        Assert.DoesNotContain("<th>GOBIERNO</th>", html);
+        Assert.DoesNotContain("<th>RESPONSABLE</th>", html);
     }
 
     [Fact]

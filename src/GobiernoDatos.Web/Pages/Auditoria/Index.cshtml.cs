@@ -8,15 +8,14 @@ using Microsoft.AspNetCore.Mvc;
 namespace GobiernoDatos.Web.Pages.Auditoria;
 
 // Auditoría de la recertificación con las columnas de la consulta HANA (CONT_TI_RECERTIFICACION), en su orden;
-// OKBAJA y COMENTARIOS = decisión y comentario capturados en el portal.
-// Filtros por evento (0 = todos), área responsable (macro área), OKBAJA y texto; exportación a Excel completa o un archivo por macro área.
+// sin GOBIERNO, RESPONSABLE ni COMENTARIOS, y OKBAJA vacía, como en HANA.
+// Filtros por evento (0 = todos), área responsable (macro área) y texto; exportación a Excel completa o un archivo por macro área.
 public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) : PortalPageModel
 {
     public const int TamanoPagina = 100;
 
     [BindProperty(SupportsGet = true)] public int? Evento { get; set; }
     [BindProperty(SupportsGet = true)] public string? Macro { get; set; }
-    [BindProperty(SupportsGet = true)] public string? Decision { get; set; }   // PENDIENTE, CONTINUA, BAJA
     [BindProperty(SupportsGet = true)] public string? Q { get; set; }
     [BindProperty(SupportsGet = true)] public int Pagina { get; set; } = 1;
 
@@ -24,7 +23,6 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
     public IReadOnlyList<string> MacroAreas { get; private set; } = [];
     public IReadOnlyList<FilaAuditoria> Filas { get; private set; } = [];       // filtradas, todas las páginas
     public IReadOnlyList<FilaAuditoria> PaginaActual { get; private set; } = [];
-    public Conteo Conteo { get; private set; } = new(0, 0, 0);
     public int Paginas => Math.Max(1, (Filas.Count + TamanoPagina - 1) / TamanoPagina);
 
     public IActionResult OnGet()
@@ -32,7 +30,6 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
         var todas = Cargar();
         Filas = Filtrar(todas, Macro);
-        Conteo = new(Filas.Count, Filas.Count(f => f.OkBaja == Domain.Decision.CONTINUA), Filas.Count(f => f.OkBaja == Domain.Decision.BAJA));
         Pagina = Math.Clamp(Pagina, 1, Paginas);
         PaginaActual = Filas.Skip((Pagina - 1) * TamanoPagina).Take(TamanoPagina).ToList();
         return Page();
@@ -66,18 +63,15 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
 
     private const string TipoXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    // Mismas columnas y orden que la consulta HANA.
+    // Columnas de la consulta HANA, en su orden, sin GOBIERNO, RESPONSABLE ni COMENTARIOS. OKBAJA va vacía, como en HANA.
     public static readonly string[] ColumnasHana =
-        ["AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "AREARESPONSABLE", "RESPONSABLE", "OKBAJA", "COMENTARIOS", "ACCESOS"];
+        ["AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "AREARESPONSABLE", "OKBAJA", "ACCESOS"];
 
     public static object?[] Valores(FilaAuditoria f) =>
-        [f.Area, f.Content, f.Rol, f.Vista, f.Usuario, f.Name, f.Gobierno, f.AreaResponsable, f.Responsable, OkBaja(f.OkBaja), f.Comentarios, f.Accesos];
+        [f.Area, f.Content, f.Rol, f.Vista, f.Usuario, f.Name, f.AreaResponsable, null, f.Accesos];
 
     private static byte[] Libro(string hoja, IEnumerable<FilaAuditoria> filas) =>
         EscritorExcel.Libro(hoja, ColumnasHana, filas.Select(Valores));
-
-    // Valores de la columna OKBAJA: OK (continúa) o BAJA; vacío mientras no hay decisión.
-    public static string? OkBaja(Decision? d) => d switch { Domain.Decision.CONTINUA => "OK", Domain.Decision.BAJA => "BAJA", _ => null };
 
     // Sin evento en la URL: el evento activo; 0 = todos los eventos.
     private IReadOnlyList<FilaAuditoria> Cargar()
@@ -94,14 +88,7 @@ public class IndexModel(IRecertificacionService recert, IUsuarioActual usuario) 
         var q = Q?.Trim();
         return filas.Where(f =>
                 (macro is null || f.AreaResponsable == macro) &&
-                (Decision switch
-                {
-                    "PENDIENTE" => f.OkBaja is null,
-                    "CONTINUA" => f.OkBaja == Domain.Decision.CONTINUA,
-                    "BAJA" => f.OkBaja == Domain.Decision.BAJA,
-                    _ => true,
-                }) &&
-                (string.IsNullOrEmpty(q) || new[] { f.Area, f.Content, f.Rol, f.Vista, f.Usuario, f.Name, f.Gobierno, f.Responsable, f.Comentarios }
+                (string.IsNullOrEmpty(q) || new[] { f.Area, f.Content, f.Rol, f.Vista, f.Usuario, f.Name }
                     .Any(t => t?.Contains(q, StringComparison.OrdinalIgnoreCase) == true)))
             .ToList();
     }
