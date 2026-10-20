@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
+using GobiernoDatos.Web.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace GobiernoDatos.Tests;
@@ -248,5 +249,41 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
         Assert.Matches(@"Data product «DP Cuatro Renombrado» eliminado junto con \d+ avances, \d+ comentarios", final);
         Assert.DoesNotContain("<tr data-texto=\"DP Cuatro Renombrado", final);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/DataProducts/Detalle?id={id}")).StatusCode);
+    }
+}
+
+// Portal propio: las demás pruebas de PortalTests deciden pendientes del evento de muestra.
+public class RecordatoriosPortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTests.Fabrica>
+{
+    private static string Token(string html) =>
+        Regex.Match(html, "name=\"__RequestVerificationToken\" type=\"hidden\" value=\"([^\"]+)\"").Groups[1].Value;
+
+    [Fact]
+    public async Task Recordar_envia_un_correo_por_certificador_y_queda_en_la_bitacora()
+    {
+        var client = fabrica.CreateClient();
+        var correos = (EnviadorSimulado)fabrica.Services.GetService(typeof(IEnviadorCorreo))!;
+        var antes = correos.Enviados.Count;
+        var html = await client.GetStringAsync("/Recertificacion/Eventos");
+        var form = WebUtility.HtmlDecode(Regex.Matches(html, "<form[^>]*>").Select(m => m.Value)
+            .First(f => f.Contains("handler=Recordar") && !f.Contains("class=\"inline\"")));
+        Assert.Contains("data-confirmar=\"Se enviará un correo a cada certificador", form);   // pide confirmación
+        var accion = Regex.Match(form, "action=\"([^\"]*)\"").Groups[1].Value;
+
+        var r = await client.PostAsync(accion, new FormUrlEncodedContent(new Dictionary<string, string> { ["__RequestVerificationToken"] = Token(html) }));
+        var final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        var enviados = correos.Enviados.Skip(antes).ToList();
+        Assert.NotEmpty(enviados);
+        Assert.Contains($"Recordatorios: {enviados.Count} {(enviados.Count == 1 ? "correo enviado" : "correos enviados")}.", final);
+        Assert.All(enviados, m => Assert.Contains("accesos pendientes", m.CuerpoHtml.Replace("acceso pendiente<", "accesos pendientes<")));
+        Assert.Contains("Recordatorios enviados", final);
+        Assert.Contains(">Enviado<", final);
+
+        // Correo de prueba al propio administrador.
+        html = await client.GetStringAsync("/Recertificacion/Eventos");
+        var prueba = WebUtility.HtmlDecode(Regex.Match(Regex.Match(html, "<form[^>]*handler=ProbarCorreo[^>]*>").Value, "action=\"([^\"]*)\"").Groups[1].Value);
+        r = await client.PostAsync(prueba, new FormUrlEncodedContent(new Dictionary<string, string> { ["__RequestVerificationToken"] = Token(html) }));
+        Assert.Contains("Correo de prueba enviado a demo@ejemplo.local.", WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync()));
+        Assert.Equal("demo@ejemplo.local", correos.Enviados[^1].Para);
     }
 }

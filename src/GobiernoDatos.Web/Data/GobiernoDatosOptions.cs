@@ -18,6 +18,23 @@ public sealed class GobiernoDatosOptions
     public string DominioPredeterminado { get; set; } = "MABENET";
 
     public UsuarioDemoOptions UsuarioDemo { get; set; } = new();
+
+    public CorreoOptions Correo { get; set; } = new();
+}
+
+// Recordatorios por correo (relay SMTP interno). La contraseña no va en appsettings: user-secrets en local y
+// variable de entorno GobiernoDatos__Correo__Contrasena en el web.config del servidor.
+public sealed class CorreoOptions
+{
+    public string? Servidor { get; set; }
+    public int Puerto { get; set; } = 25;
+    public bool UsarTls { get; set; }
+    public string? Usuario { get; set; }
+    public string? Dominio { get; set; }
+    public string? Contrasena { get; set; }
+    public string? Remitente { get; set; }
+    // Dirección del portal para la liga de los correos (ej. http://srvmabe602:8010).
+    public string? UrlPortal { get; set; }
 }
 
 // Identidad simulada para desarrollo local (Kestrel no tiene autenticación de Windows).

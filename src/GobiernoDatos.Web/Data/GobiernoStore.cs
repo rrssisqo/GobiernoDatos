@@ -31,6 +31,7 @@ public sealed class GobiernoStore(TimeProvider reloj)
     public List<RecertAcceso> Accesos { get; } = [];
     public List<RecertDecision> Decisiones { get; } = [];
     public List<RecertBajaEjecucion> BajasEjecutadas { get; } = [];
+    public List<RecertRecordatorio> Recordatorios { get; } = [];
     public List<VistaUso> Usos { get; } = [];
 
     private long _seq;

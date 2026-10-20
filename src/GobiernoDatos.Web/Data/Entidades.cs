@@ -223,6 +223,10 @@ public sealed class RecertDecision
     public DateTime FechaRegistro { get; init; }
 }
 
+// Recordatorio por correo a un certificador (gd.recert_recordatorio, migración 009).
+public sealed record RecertRecordatorio(int EventoId, string Certificador, string? UsuarioRed, string? Correo, string MacroAreas,
+                                        int Pendientes, bool Enviado, string? Error, string EnviadoPor, DateTime Fecha);
+
 public sealed class RecertBajaEjecucion
 {
     public long AccesoId { get; init; }

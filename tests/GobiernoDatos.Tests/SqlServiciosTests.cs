@@ -33,7 +33,7 @@ public sealed class BaseSqlPrueba : IDisposable
         foreach (var script in new[] { "db/gobierno_datos_ddl_v2.sql", "db/seeds/001_muestras_v2.sql", "db/migrations/001_v3_recertificacion.sql",
                                         "db/migrations/002_portal.sql", "db/migrations/003_responsable_usuario_red.sql",
                                         "db/migrations/004_tarea_vista.sql", "db/migrations/005_avance_vista_captura_libre.sql", "db/migrations/006_calidad_marca_de_carga.sql", "db/migrations/007_avance_reportado_dp.sql",
-                                        "db/migrations/008_auditoria_columnas_hana.sql",
+                                        "db/migrations/008_auditoria_columnas_hana.sql", "db/migrations/009_recert_recordatorio.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -247,6 +247,18 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.Equal(4, mi.Accesos.Count);
         Assert.All(mi.Accesos, a => Assert.Equal("TI", a.MacroArea));
 
+        // Recordatorio a TI: un correo al certificador (correo de AD) y su renglón en la bitácora.
+        var correos = new EnviadorSimulado();
+        var recordatorios = new RecordatoriosService(recert, new DirectorioDePrueba(), correos, opciones, TimeProvider.System,
+                                                     Microsoft.Extensions.Logging.Abstractions.NullLogger<RecordatoriosService>.Instance);
+        Assert.Equal(1, recordatorios.Enviar(evento.EventoId, "TI", "admin").Enviados);
+        var enviado = Assert.Single(correos.Enviados);
+        Assert.Equal("cprueba@mabe.com.mx", enviado.Para);
+        Assert.Contains("4 accesos pendientes", enviado.Asunto);
+        var bitacora = Assert.Single(recert.Recordatorios(evento.EventoId));
+        Assert.True(bitacora.Enviado);
+        Assert.Equal(("TI", 4, cert, "admin"), (bitacora.MacroAreas, bitacora.Pendientes, bitacora.UsuarioRed, bitacora.EnviadoPor));
+
         var baja = mi.Accesos[0];
         Assert.Throws<DomainException>(() => recert.Decidir(baja.AccesoId, Decision.BAJA, " ", cert));
         Assert.Throws<DomainException>(() => recert.Decidir(baja.AccesoId, Decision.CONTINUA, null, @"MABENET\otra"));
@@ -292,6 +304,7 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         public string NombreVisible(string login) => BuscarNombre(login) ?? login;
         public string? BuscarNombre(string usuarioRed) =>
             string.Equals(usuarioRed, @"MABENET\cprueba", StringComparison.OrdinalIgnoreCase) ? "Prueba, Certificador (MEX, TI)" : null;
+        public string? BuscarCorreo(string usuarioRed) => BuscarNombre(usuarioRed) is null ? null : "cprueba@mabe.com.mx";
     }
 
     [SkippableFact]

@@ -38,6 +38,10 @@ public sealed record FilaAuditoria(long AccesoId, int EventoId, string Evento,
                                    string? Gobierno, string AreaResponsable, string? Responsable,
                                    Decision? OkBaja, string? Comentarios, int Accesos);
 
+// Pendientes de un evento abierto por certificador vigente y macro área (gd.vw_recert_pendientes_certificador).
+// Correo = el registrado en gd.responsable; si es nulo se busca en Active Directory con el usuario de red.
+public sealed record CertificadorPendiente(string Certificador, string? UsuarioRed, string? Correo, string MacroArea, string Tipo, int Pendientes);
+
 public sealed record PasoTraza(DateTime Fecha, string Titulo, string Detalle);
 
 // UsuarioRed nulo: responsable registrado solo por nombre (extracto); no puede actuar hasta asignarle su usuario de red.
@@ -64,6 +68,9 @@ public interface IRecertificacionService
     string EvidenciaCsv(int eventoId);
     // Todos los accesos de un evento (o de todos los eventos si es nulo), ordenados por evento, macro área, vista y usuario.
     IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId);
+    IReadOnlyList<CertificadorPendiente> PendientesPorCertificador(int eventoId);
+    void RegistrarRecordatorio(RecertRecordatorio recordatorio);
+    IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId);
     IReadOnlyList<CertificadoresMacroArea> Certificadores();
     // El certificador se identifica por su usuario de red (DOMINIO\usuario); el nombre sale del directorio.
     void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo);
@@ -350,6 +357,31 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                     x.Decision?.Decision, x.Decision?.Comentario, a.Accesos3m);
             }))
             .OrderByDescending(f => f.EventoId).ThenBy(f => f.AreaResponsable).ThenBy(f => f.Vista).ThenBy(f => f.Usuario).ToList();
+    }
+
+    public IReadOnlyList<CertificadorPendiente> PendientesPorCertificador(int eventoId)
+    {
+        lock (s.Sync)
+        {
+            if (Evento(eventoId).Estatus != EstatusEvento.ABIERTO) return [];
+            return Vigentes(eventoId).Where(x => x.Decision is null).GroupBy(x => x.Acceso.MacroAreaId)
+                .SelectMany(g =>
+                {
+                    var m = s.MacroAreas.First(x => x.MacroAreaId == g.Key);
+                    return m.Certificadores.Select(c => new CertificadorPendiente(c.Nombre, c.UsuarioRed, null, m.Nombre, c.Tipo, g.Count()));
+                })
+                .OrderBy(p => p.MacroArea).ThenByDescending(p => p.Tipo).ToList();
+        }
+    }
+
+    public void RegistrarRecordatorio(RecertRecordatorio recordatorio)
+    {
+        lock (s.Sync) s.Recordatorios.Add(recordatorio);
+    }
+
+    public IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId)
+    {
+        lock (s.Sync) return s.Recordatorios.Where(r => r.EventoId == eventoId).OrderByDescending(r => r.Fecha).ToList();
     }
 
     public IReadOnlyList<CertificadoresMacroArea> Certificadores()

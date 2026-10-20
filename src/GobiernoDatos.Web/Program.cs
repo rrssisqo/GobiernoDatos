@@ -75,6 +75,14 @@ else
     builder.Services.AddScoped<IUsuarioActual, UsuarioDemo>();
 }
 
+// Correo: relay SMTP si está configurado o en producción (sin configuración avisa al enviar); en desarrollo, simulado.
+var servidorCorreo = builder.Configuration[$"{GobiernoDatosOptions.Seccion}:Correo:Servidor"];
+if (!string.IsNullOrWhiteSpace(servidorCorreo) || builder.Environment.IsProduction())
+    builder.Services.AddSingleton<IEnviadorCorreo, EnviadorSmtp>();
+else
+    builder.Services.AddSingleton<IEnviadorCorreo, EnviadorSimulado>();
+builder.Services.AddSingleton<RecordatoriosService>();
+
 builder.Services.AddSingleton<ResolutorUsuarios>();
 builder.Services.AddRazorPages();
 

@@ -47,7 +47,8 @@ else
                 }
                 @if (e.Estatus == EstatusEvento.ABIERTO)
                 {
-                    <form method="post" asp-page-handler="Recordar" asp-route-evento="@e.EventoId">
+                    <form method="post" asp-page-handler="Recordar" asp-route-evento="@e.EventoId"
+                          data-confirmar="Se enviará un correo a cada certificador con accesos pendientes (@t.Conteo.Pendientes.ToString("N0") pendientes en total). ¿Enviar recordatorios?">
                         <button type="submit" class="btn" disabled="@(t.Conteo.Pendientes == 0)">Recordar a pendientes</button>
                     </form>
                     <form method="post" asp-page-handler="Cerrar" asp-route-evento="@e.EventoId"
@@ -104,7 +105,8 @@ else
                                     <td>
                                         @if (e.Estatus == EstatusEvento.ABIERTO && m.Conteo.Pendientes > 0)
                                         {
-                                            <form method="post" asp-page-handler="Recordar" asp-route-evento="@e.EventoId" class="inline">
+                                            <form method="post" asp-page-handler="Recordar" asp-route-evento="@e.EventoId" class="inline"
+                                                  data-confirmar="Se enviará un correo a los certificadores de @m.MacroArea (@m.Conteo.Pendientes.ToString("N0") pendientes). ¿Enviar recordatorio?">
                                                 <input type="hidden" name="macroArea" value="@m.MacroArea" />
                                                 <button type="submit" class="btn btn-chico">Recordar</button>
                                             </form>
@@ -142,6 +144,41 @@ else
             </div>
         </section>
     </div>
+
+    <section class="panel" aria-labelledby="h-rec" id="recordatorios">
+        <div class="panel-cab">
+            <h2 id="h-rec">Recordatorios enviados</h2>
+            <form method="post" asp-page-handler="ProbarCorreo" asp-route-evento="@e.EventoId">
+                <button type="submit" class="btn btn-chico" title="Envía un correo de prueba a tu propio buzón">Enviar correo de prueba</button>
+            </form>
+        </div>
+        @if (Model.Recordatorios.Count == 0)
+        {
+            <div class="vacio">Todavía no se han enviado recordatorios de este evento.</div>
+        }
+        else
+        {
+            <div class="tabla-scroll">
+                <table class="tabla">
+                    <thead><tr><th>Fecha</th><th>Certificador</th><th>Correo</th><th>Macro áreas</th><th class="derecha">Pendientes</th><th>Resultado</th><th>Envió</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in Model.Recordatorios.Take(200))
+                        {
+                            <tr>
+                                <td class="mono">@r.Fecha.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@r.Certificador</td>
+                                <td class="mono">@Ui.Texto(r.Correo, "—")</td>
+                                <td>@r.MacroAreas</td>
+                                <td class="num">@r.Pendientes</td>
+                                <td>@if (r.Enviado) { <span class="badge badge-ok">Enviado</span> } else { <span class="badge badge-error" title="@r.Error">No enviado</span> <span class="ayuda">@r.Error</span> }</td>
+                                <td class="mono">@r.EnviadoPor</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 }
 
 <section class="panel" aria-labelledby="h-hist">

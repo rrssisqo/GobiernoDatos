@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace GobiernoDatos.Web.Pages.Recertificacion;
 
-public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente, TimeProvider reloj, IUsuarioActual usuario) : PortalPageModel
+public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente, TimeProvider reloj, IUsuarioActual usuario,
+                          RecordatoriosService recordatorios) : PortalPageModel
 {
     [BindProperty(SupportsGet = true)] public int? Evento { get; set; }
 
@@ -15,6 +16,7 @@ public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente
     public bool PuedeCrear { get; private set; }
     public IFuenteExtracto Fuente => fuente;
     public IReadOnlyList<CertificadoresMacroArea> Certificadores { get; private set; } = [];
+    public IReadOnlyList<RecertRecordatorio> Recordatorios { get; private set; } = [];
 
     [BindProperty] public string Nombre { get; set; } = "";
     [BindProperty] public DateOnly? FechaExtracto { get; set; }
@@ -28,6 +30,7 @@ public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente
         Historial = recert.Historial();
         PuedeCrear = Historial.All(h => h.Estatus == EstatusEvento.CERRADO);
         Certificadores = recert.Certificadores();
+        if (Tablero is not null) Recordatorios = recert.Recordatorios(Tablero.Evento.EventoId);
         return Page();
     }
 
@@ -69,11 +72,26 @@ public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente
         return Ejecutar(() => recert.DescartarBorrador(Evento!.Value), "Borrador descartado.", () => RedirectToPage());
     }
 
-    // El envío de correo depende de la decisión de stack y hosting (pendiente con Memo).
+    // Un correo por certificador con pendientes (de todas las macro áreas o solo de una); cada intento queda en la bitácora.
     public IActionResult OnPostRecordar(string? macroArea)
     {
-        MensajeOk = $"Recordatorio{(macroArea is null ? "s" : " a " + macroArea)}: el envío de correo se habilitará cuando se defina el servicio de notificaciones.";
-        return RedirectToPage(new { Evento });
+        if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
+        return Ejecutar(() =>
+            {
+                var r = recordatorios.Enviar(Evento!.Value, macroArea, usuario.Login);
+                var texto = $"Recordatorios{(macroArea is null ? "" : " de " + macroArea)}: {r.Enviados} {(r.Enviados == 1 ? "correo enviado" : "correos enviados")}.";
+                if (r.SinCorreo.Count > 0) texto += $" Sin correo: {string.Join("; ", r.SinCorreo)}.";
+                if (r.Errores.Count > 0) texto += $" Con error: {string.Join("; ", r.Errores)}.";
+                if (r.Enviados == 0) MensajeError = texto; else MensajeOk = texto;
+            },
+            "", () => RedirectToPage(null, null, new { Evento }, "recordatorios"));
+    }
+
+    public IActionResult OnPostProbarCorreo()
+    {
+        if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
+        return Ejecutar(() => MensajeOk = $"Correo de prueba enviado a {recordatorios.EnviarPrueba(usuario.Login)}.",
+                        "", () => RedirectToPage(null, null, new { Evento }, "recordatorios"));
     }
 
     public IActionResult OnPostAsignar(int macroAreaId, string? usuarioRed, string tipo) =>

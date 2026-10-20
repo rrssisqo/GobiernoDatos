@@ -67,6 +67,9 @@ public interface IDirectorioUsuarios
 
     // Nombre del usuario en el directorio, o null si no existe. Lanza DomainException si el directorio no responde.
     string? BuscarNombre(string usuarioRed);
+
+    // Correo registrado en el directorio (recordatorios), o null si no tiene. Lanza DomainException si el directorio no responde.
+    string? BuscarCorreo(string usuarioRed) => null;
 }
 
 // Active Directory, con caché.
@@ -85,16 +88,22 @@ public sealed class DirectorioActivo(IMemoryCache cache, ILogger<DirectorioActiv
     }
 
     // Solo se guardan en caché las respuestas del directorio (encontrado o no); un error no se guarda.
-    public string? BuscarNombre(string usuarioRed)
+    public string? BuscarNombre(string usuarioRed) => Datos(usuarioRed)?.Nombre;
+
+    public string? BuscarCorreo(string usuarioRed) => Datos(usuarioRed)?.Correo;
+
+    private sealed record DatosAd(string Nombre, string? Correo);
+
+    private DatosAd? Datos(string usuarioRed)
     {
         var clave = "ad:" + usuarioRed.ToUpperInvariant();
-        if (cache.TryGetValue(clave, out string? nombre)) return nombre;
-        nombre = Consultar(usuarioRed);
-        cache.Set(clave, nombre, TimeSpan.FromHours(8));
-        return nombre;
+        if (cache.TryGetValue(clave, out DatosAd? datos)) return datos;
+        datos = Consultar(usuarioRed);
+        cache.Set(clave, datos, TimeSpan.FromHours(8));
+        return datos;
     }
 
-    private string? Consultar(string usuarioRed)
+    private DatosAd? Consultar(string usuarioRed)
     {
         if (!OperatingSystem.IsWindows()) throw new DomainException("Active Directory no está disponible en este servidor.");
         try
@@ -103,7 +112,8 @@ public sealed class DirectorioActivo(IMemoryCache cache, ILogger<DirectorioActiv
             using var contexto = partes.Length == 2 ? new PrincipalContext(ContextType.Domain, partes[0]) : new PrincipalContext(ContextType.Domain);
             using var usuario = UserPrincipal.FindByIdentity(contexto, IdentityType.SamAccountName, partes[^1]);
             if (usuario is null) return null;
-            return string.IsNullOrWhiteSpace(usuario.DisplayName) ? usuario.SamAccountName : usuario.DisplayName;
+            return new DatosAd(string.IsNullOrWhiteSpace(usuario.DisplayName) ? usuario.SamAccountName : usuario.DisplayName,
+                               string.IsNullOrWhiteSpace(usuario.EmailAddress) ? null : usuario.EmailAddress.Trim());
         }
         catch (Exception ex)
         {
@@ -124,4 +134,7 @@ public sealed class DirectorioSimulado(IOptions<GobiernoDatosOptions> opciones) 
         var demo = UsuarioRed.Normalizar(o.UsuarioDemo.Login, o.DominioPredeterminado);
         return string.Equals(usuarioRed, demo, StringComparison.OrdinalIgnoreCase) ? o.UsuarioDemo.Nombre : usuarioRed;
     }
+
+    // Correo ficticio para desarrollo (el envío también es simulado).
+    public string? BuscarCorreo(string usuarioRed) => $"{usuarioRed.Split('\\')[^1].ToLowerInvariant()}@ejemplo.local";
 }

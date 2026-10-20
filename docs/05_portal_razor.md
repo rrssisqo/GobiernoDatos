@@ -166,6 +166,15 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 - Días transcurridos = desde la asignación hasta hoy; al cerrarse se congelan. `gd.vw_seguimiento_tarea` lo expone para Power BI.
 - **Decisión a confirmar:** al cambiar de etapa con la tarea abierta, se cancela ("Cambio de etapa"), no se da por terminada.
 
+## Recordatorios por correo (migración 009)
+
+- En **Eventos** (evento abierto): "Recordar a pendientes" (todas las macro áreas) o "Recordar" por macro área; ambos piden confirmación.
+- Un correo por certificador vigente (titular o delegado) con pendientes, aunque certifique varias macro áreas: sus macro áreas con pendientes, la fecha límite y la liga a Mi recertificación (`Correo:UrlPortal`).
+- Destinatario: `gd.responsable.correo` si está capturado; si no, el correo de Active Directory del **usuario de red** del certificador. Sin usuario de red ni correo no se envía y se reporta.
+- Cada intento queda en `gd.recert_recordatorio` (a quién, correo, macro áreas, pendientes, enviado o error, quién lo envió, fecha) y se muestra en Eventos → "Recordatorios enviados".
+- "Enviar correo de prueba" (Eventos) manda un correo al administrador que lo pulsa, para validar el relay.
+- Configuración (`GobiernoDatos:Correo` en `appsettings.Production.json`): relay `relay.mabenet.corpmabe.com:25`, cuenta `mabenet\sacmexalt`, remitente `administrador.analytics@mabe.com.mx`. La contraseña **no** está en el repositorio: variable `GobiernoDatos__Correo__Contrasena` en el `web.config` del servidor (user-secrets en local). Sin `Correo:Servidor` fuera de producción el envío es simulado (`EnviadorSimulado`).
+
 ## Decisiones que tomé y conviene confirmar
 
 1. **Rubros de vista de DP sin vistas asignadas** (resuelta con la migración 007: avance reportado). El Excel trae Glosario, Linaje, Perfil y Reglas a nivel DP, pero no dice qué vistas tiene cada DP. Los migré como valor inicial del DP y se usan solo mientras el DP no tenga vistas asignadas; al asignar la primera, el cálculo pasa a ser el promedio de sus vistas. Alternativa: asignar las vistas reales antes de migrar.
@@ -173,7 +182,7 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 3. **Un solo evento activo a la vez.** No se puede crear un evento mientras otro esté en borrador o abierto.
 4. **Filas rechazadas.** Se resuelven corrigiendo el extracto, descartando el borrador y volviendo a cargarlo. La sincronización del inventario ocurre al cargar (antes de abrir).
 5. **Bajas ejecutadas.** Una vez registrada la ejecución, la decisión de ese acceso ya no puede cambiar.
-6. **Recordatorios.** El botón existe, pero no envía correo hasta que se defina el servicio de notificaciones.
+6. **Recordatorios.** Se envían a mano desde Eventos (no hay envío automático); ver "Recordatorios por correo".
 
 ## Pendiente
 

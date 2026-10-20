@@ -209,3 +209,8 @@ LEFT JOIN gd.vw_recert_decision_vigente AS d ON d.acceso_id = a.acceso_id
 LEFT JOIN gd.responsable AS rs ON rs.responsable_id = d.decidido_por
 LEFT JOIN gd.recert_baja_ejecucion AS b ON b.acceso_id = a.acceso_id;
 GO
+
+IF NOT EXISTS (SELECT 1 FROM gd.migracion WHERE migracion_id = '008_auditoria_columnas_hana')
+    INSERT INTO gd.migracion (migracion_id, descripcion)
+    VALUES ('008_auditoria_columnas_hana', N'AREA, CONTENT, GOBIERNO y RESPONSABLE del extracto por acceso (Auditoría)');
+GO

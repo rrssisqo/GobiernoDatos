@@ -382,6 +382,45 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
                 f.gobierno, f.macro_area, f.responsable, Decisión(f.decision), f.comentario, f.accesos_3m)).ToList();
     }
 
+    // ---- Recordatorios ----
+
+    private sealed record PendienteRow(string certificador, string? usuario_red, string? correo, string macro_area, string tipo, int pendientes);
+
+    public IReadOnlyList<CertificadorPendiente> PendientesPorCertificador(int eventoId)
+    {
+        using var c = db.Abrir();
+        return c.Query<PendienteRow>("""
+            SELECT certificador, usuario_red, correo, macro_area, tipo, pendientes
+            FROM gd.vw_recert_pendientes_certificador
+            WHERE evento_id = @eventoId
+            ORDER BY macro_area, tipo DESC, certificador
+            """, new { eventoId })
+            .Select(p => new CertificadorPendiente(p.certificador, p.usuario_red, p.correo, p.macro_area, p.tipo, p.pendientes)).ToList();
+    }
+
+    public void RegistrarRecordatorio(RecertRecordatorio r)
+    {
+        using var c = db.Abrir();
+        c.Execute("""
+            INSERT INTO gd.recert_recordatorio (evento_id, certificador, usuario_red, correo, macro_areas, pendientes, enviado, error, enviado_por, fecha)
+            VALUES (@EventoId, @Certificador, @UsuarioRed, @Correo, @MacroAreas, @Pendientes, @Enviado, LEFT(@Error, 400), @EnviadoPor, @Fecha)
+            """, r);
+    }
+
+    private sealed record RecordatorioRow(int evento_id, string certificador, string? usuario_red, string? correo, string macro_areas,
+                                          int pendientes, bool enviado, string? error, string enviado_por, DateTime fecha);
+
+    public IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId)
+    {
+        using var c = db.Abrir();
+        return c.Query<RecordatorioRow>("""
+            SELECT evento_id, certificador, usuario_red, correo, macro_areas, pendientes, enviado, error, enviado_por, fecha
+            FROM gd.recert_recordatorio WHERE evento_id = @eventoId ORDER BY fecha DESC, recordatorio_id DESC
+            """, new { eventoId })
+            .Select(r => new RecertRecordatorio(r.evento_id, r.certificador, r.usuario_red, r.correo, r.macro_areas, r.pendientes,
+                                                r.enviado, r.error, r.enviado_por, r.fecha)).ToList();
+    }
+
     // ---- Certificadores ----
 
     private sealed record CertificadorRow(int macro_area_id, string macro_area, string? nombre, string? usuario_red, string? tipo);
