@@ -1,0 +1,120 @@
+@page
+@model GobiernoDatos.Web.Pages.Auditoria.IndexModel
+@{
+    ViewData["Title"] = "Auditoría";
+    ViewData["Nav"] = "auditoria";
+    var c = Model.Conteo;
+    string ClaseDecision(Decision? d) => d switch { Decision.CONTINUA => "badge-ok", Decision.BAJA => "badge-error", _ => "badge-neutro" };
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Auditoría</h1>
+        <p>Toda la información de la recertificación: accesos, decisión vigente y ejecución de bajas</p>
+    </div>
+    <div class="acciones">
+        <a class="btn" id="btn-exportar" asp-page-handler="Exportar" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
+           asp-route-decision="@Model.Decision" asp-route-q="@Model.Q">Exportar a Excel</a>
+        <a class="btn btn-primario" id="btn-exportar-macro" asp-page-handler="ExportarPorMacro" asp-route-evento="@Model.Evento"
+           asp-route-decision="@Model.Decision" asp-route-q="@Model.Q"
+           title="Descarga un .zip con un archivo de Excel por cada macro área">Exportar por macro área</a>
+    </div>
+</header>
+
+<section class="kpis" aria-label="Indicadores">
+    <div class="kpi"><span class="etq">Accesos</span><span class="valor">@c.Accesos.ToString("N0")</span><span class="nota">con los filtros aplicados</span></div>
+    <div class="kpi"><span class="etq">Continúa</span><span class="valor">@c.Continua.ToString("N0")</span></div>
+    <div class="kpi"><span class="etq">Baja</span><span class="valor">@c.Baja.ToString("N0")</span></div>
+    <div class="kpi"><span class="etq">Pendientes</span><span class="valor">@c.Pendientes.ToString("N0")</span><span class="nota">@Ui.Pct(c.Avance * 100) decidido</span></div>
+</section>
+
+<section class="panel" aria-label="Accesos de recertificación">
+    <form method="get" class="panel-cuerpo form-fila" id="form-filtros">
+        <label class="campo">Evento
+            <select name="evento" data-autosubmit>
+                <option value="0" selected="@(Model.Evento == 0)">Todos los eventos</option>
+                @foreach (var e in Model.Eventos)
+                {
+                    <option value="@e.EventoId" selected="@(e.EventoId == Model.Evento)">@e.Nombre · @ReglasRecertificacion.Etiqueta(e.Estatus)</option>
+                }
+            </select>
+        </label>
+        <label class="campo">Macro área
+            <select name="macro" data-autosubmit>
+                <option value="">Todas</option>
+                @foreach (var m in Model.MacroAreas) { <option value="@m" selected="@(m == Model.Macro)">@m</option> }
+            </select>
+        </label>
+        <label class="campo">Decisión
+            <select name="decision" data-autosubmit>
+                <option value="">Todas</option>
+                <option value="PENDIENTE" selected="@(Model.Decision == "PENDIENTE")">Pendiente</option>
+                <option value="CONTINUA" selected="@(Model.Decision == "CONTINUA")">Continúa</option>
+                <option value="BAJA" selected="@(Model.Decision == "BAJA")">Baja</option>
+            </select>
+        </label>
+        <label class="campo" style="flex:2 1 240px">Buscar
+            <input type="search" name="q" value="@Model.Q" placeholder="Usuario, nombre, rol, vista, ticket…" />
+        </label>
+        <button type="submit" class="btn" style="flex:0 0 auto">Filtrar</button>
+    </form>
+
+    @if (Model.Filas.Count == 0)
+    {
+        <div class="vacio">No hay accesos con estos filtros.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla tabla-auditoria" id="tabla-auditoria">
+                <thead>
+                    <tr>
+                        @if (Model.Evento == 0) { <th>Evento</th> }
+                        <th>Macro área</th><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Vista</th><th class="derecha">Accesos 3m</th>
+                        <th>Decisión</th><th>Comentario</th><th>Decidió</th><th>Fecha decisión</th><th>Ticket</th><th>Fecha ejecución</th><th>Ejecutó</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in Model.PaginaActual)
+                    {
+                        <tr>
+                            @if (Model.Evento == 0) { <td>@f.Evento</td> }
+                            <td>@f.MacroArea</td>
+                            <td class="mono">@f.Usuario</td>
+                            <td>@f.NombreUsuario</td>
+                            <td class="mono">@f.Rol</td>
+                            <td class="mono">@f.Vista</td>
+                            <td class="num">@f.Accesos3m</td>
+                            <td><span class="badge @ClaseDecision(f.Decision)">@GobiernoDatos.Web.Pages.Auditoria.IndexModel.EtiquetaDecision(f.Decision)</span></td>
+                            <td>@Ui.Texto(f.Comentario, "—")</td>
+                            <td>@Ui.Texto(f.DecididoPor, "—")</td>
+                            <td class="mono">@(f.FechaDecision?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                            <td class="mono">@Ui.Texto(f.Ticket, "—")</td>
+                            <td class="mono">@(f.FechaEjecucion?.ToString("yyyy-MM-dd") ?? "—")</td>
+                            <td>@Ui.Texto(f.EjecutadoPor, "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="panel-pie">
+        <span>
+            @if (Model.Filas.Count > 0)
+            {
+                @($"{(Model.Pagina - 1) * GobiernoDatos.Web.Pages.Auditoria.IndexModel.TamanoPagina + 1:N0}–{Math.Min(Model.Pagina * GobiernoDatos.Web.Pages.Auditoria.IndexModel.TamanoPagina, Model.Filas.Count):N0} de {Model.Filas.Count:N0} accesos")
+            }
+        </span>
+        @if (Model.Paginas > 1)
+        {
+            <nav class="paginacion" aria-label="Páginas">
+                <a class="btn btn-chico" aria-disabled="@(Model.Pagina == 1 ? "true" : "false")" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
+                   asp-route-decision="@Model.Decision" asp-route-q="@Model.Q" asp-route-pagina="@(Model.Pagina - 1)">Anterior</a>
+                <span class="mono">Página @Model.Pagina de @Model.Paginas</span>
+                <a class="btn btn-chico" aria-disabled="@(Model.Pagina == Model.Paginas ? "true" : "false")" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
+                   asp-route-decision="@Model.Decision" asp-route-q="@Model.Q" asp-route-pagina="@(Model.Pagina + 1)">Siguiente</a>
+            </nav>
+        }
+    </div>
+</section>

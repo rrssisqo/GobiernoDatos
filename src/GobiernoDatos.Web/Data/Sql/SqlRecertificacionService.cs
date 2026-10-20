@@ -363,6 +363,25 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             }));
     }
 
+    private sealed record AuditoriaRow(long acceso_id, int evento_id, string evento, string estatus_evento, string macro_area, string usuario,
+                                       string nombre_usuario, string rol, string vista, int accesos_3m, string decision, string? comentario,
+                                       string? decidido_por, DateTime? fecha_decision, string? ticket, DateTime? fecha_ejecucion, string? ejecutado_por);
+
+    public IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId)
+    {
+        using var c = db.Abrir();
+        return c.Query<AuditoriaRow>("""
+            SELECT acceso_id, evento_id, evento, estatus_evento, macro_area, usuario, nombre_usuario, rol, vista, accesos_3m, decision,
+                   comentario, decidido_por, fecha_decision, ticket, fecha_ejecucion, ejecutado_por
+            FROM gd.vw_recert_evidencia
+            WHERE @eventoId IS NULL OR evento_id = @eventoId
+            ORDER BY evento_id DESC, macro_area, vista, usuario
+            """, new { eventoId })
+            .Select(f => new FilaAuditoria(f.acceso_id, f.evento_id, f.evento, Enum.Parse<EstatusEvento>(f.estatus_evento), f.macro_area,
+                f.usuario, f.nombre_usuario, f.rol, f.vista, f.accesos_3m, Decisión(f.decision), f.comentario, f.decidido_por,
+                f.fecha_decision, f.ticket, D(f.fecha_ejecucion), f.ejecutado_por)).ToList();
+    }
+
     // ---- Certificadores ----
 
     private sealed record CertificadorRow(int macro_area_id, string macro_area, string? nombre, string? usuario_red, string? tipo);

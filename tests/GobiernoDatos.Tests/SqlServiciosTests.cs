@@ -355,6 +355,20 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
     }
 
     [SkippableFact]
+    public void Auditoria_lee_todos_los_accesos_de_la_evidencia()
+    {
+        var db = Db();
+        var recert = new SqlRecertificacionService(db, new DirectorioDePrueba(), Options.Create(new GobiernoDatosOptions()));
+        using var c = db.Abrir();
+        var todas = recert.Auditoria(null);
+        Assert.Equal(c.ExecuteScalar<int>("SELECT COUNT(*) FROM gd.vw_recert_evidencia"), todas.Count);
+        Assert.NotEmpty(todas);
+        var evento = todas[0].EventoId;
+        Assert.All(recert.Auditoria(evento), f => Assert.Equal(evento, f.EventoId));
+        Assert.All(todas, f => Assert.False(string.IsNullOrEmpty(f.MacroArea)));
+    }
+
+    [SkippableFact]
     public void Editar_y_eliminar_data_product_sobre_la_base()
     {
         var db = Db();

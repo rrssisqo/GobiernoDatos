@@ -31,6 +31,12 @@ public sealed record FilaBaja(long AccesoId, string UsuarioCodigo, string Usuari
 
 public sealed record TableroBajas(RecertEvento Evento, IReadOnlyList<FilaBaja> Filas, int Decididas, int Ejecutadas, decimal? DiasPromedio);
 
+// Auditoría: un renglón por acceso, con la decisión vigente y la ejecución de la baja (gd.vw_recert_evidencia).
+public sealed record FilaAuditoria(long AccesoId, int EventoId, string Evento, EstatusEvento EstatusEvento, string MacroArea,
+                                   string Usuario, string NombreUsuario, string Rol, string Vista, int Accesos3m,
+                                   Decision? Decision, string? Comentario, string? DecididoPor, DateTime? FechaDecision,
+                                   string? Ticket, DateOnly? FechaEjecucion, string? EjecutadoPor);
+
 public sealed record PasoTraza(DateTime Fecha, string Titulo, string Detalle);
 
 // UsuarioRed nulo: responsable registrado solo por nombre (extracto); no puede actuar hasta asignarle su usuario de red.
@@ -55,6 +61,8 @@ public interface IRecertificacionService
     IReadOnlyList<PasoTraza> Traza(long accesoId);
     void RegistrarEjecucion(long accesoId, string ticket, DateOnly? fecha, string usuario);
     string EvidenciaCsv(int eventoId);
+    // Todos los accesos de un evento (o de todos los eventos si es nulo), ordenados por evento, macro área, vista y usuario.
+    IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId);
     IReadOnlyList<CertificadoresMacroArea> Certificadores();
     // El certificador se identifica por su usuario de red (DOMINIO\usuario); el nombre sale del directorio.
     void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo);
@@ -325,6 +333,22 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             return Csv.Escribir(["Evento", "Estatus evento", "Macro área", "Usuario", "Nombre", "Rol", "Vista", "Accesos 3 meses",
                                  "Decisión", "Comentario", "Decidió", "Fecha decisión", "Ticket", "Fecha ejecución", "Ejecutó"], filas);
         }
+    }
+
+    public IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId)
+    {
+        lock (s.Sync)
+            return s.Eventos.Where(e => eventoId is null || e.EventoId == eventoId).SelectMany(e => Vigentes(e.EventoId).Select(x =>
+            {
+                var a = x.Acceso;
+                var ej = s.BajasEjecutadas.FirstOrDefault(b => b.AccesoId == a.AccesoId);
+                return new FilaAuditoria(a.AccesoId, e.EventoId, e.Nombre, e.Estatus, s.MacroAreas.First(m => m.MacroAreaId == a.MacroAreaId).Nombre,
+                    a.UsuarioCodigo, s.UsuariosHana.First(u => u.Codigo == a.UsuarioCodigo).Nombre, a.Rol,
+                    s.Vistas.First(v => v.VistaId == a.VistaId).RutaTecnica, a.Accesos3m,
+                    x.Decision?.Decision, x.Decision?.Comentario, x.Decision?.DecididoPor, x.Decision?.FechaRegistro,
+                    ej?.Ticket, ej?.FechaEjecucion, ej?.EjecutadoPor);
+            }))
+            .OrderByDescending(f => f.EventoId).ThenBy(f => f.MacroArea).ThenBy(f => f.Vista).ThenBy(f => f.Usuario).ToList();
     }
 
     public IReadOnlyList<CertificadoresMacroArea> Certificadores()

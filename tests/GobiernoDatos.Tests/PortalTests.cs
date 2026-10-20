@@ -147,6 +147,50 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
     }
 
     [Fact]
+    public async Task Auditoria_muestra_los_accesos_y_exporta_a_excel_completo_y_por_macro_area()
+    {
+        var client = fabrica.CreateClient();
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria?evento=0"));
+        Assert.Contains("<h1>Auditoría</h1>", html);
+        var filasGrid = Regex.Matches(html, "<tbody>(.*?)</tbody>", RegexOptions.Singleline)[0].Groups[1].Value;
+        Assert.True(Regex.Matches(filasGrid, "<tr>").Count > 0);
+        var macros = Regex.Matches(Regex.Match(html, "<select name=\"macro\".*?</select>", RegexOptions.Singleline).Value, "<option value=\"([^\"]+)\"")
+                          .Select(m => m.Groups[1].Value).ToList();
+        Assert.NotEmpty(macros);
+
+        // Excel completo: un renglón por acceso con los mismos encabezados que la evidencia.
+        var r = await client.GetAsync("/Auditoria?handler=Exportar&evento=0");
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", r.Content.Headers.ContentType!.MediaType);
+        using var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(await r.Content.ReadAsByteArrayAsync()));
+        var hoja = libro.Worksheet(1);
+        Assert.Equal("Macro área", hoja.Cell(1, 3).GetString());
+        var total = hoja.LastRowUsed()!.RowNumber() - 1;
+        Assert.Contains($"de {total:N0} accesos", html);
+
+        // Por macro área: un .xlsx por cada una dentro de un .zip; juntos suman lo mismo que el completo.
+        r = await client.GetAsync("/Auditoria?handler=ExportarPorMacro&evento=0");
+        Assert.Equal("application/zip", r.Content.Headers.ContentType!.MediaType);
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await r.Content.ReadAsByteArrayAsync()));
+        Assert.Equal(macros.Count, zip.Entries.Count);
+        var suma = 0;
+        foreach (var e in zip.Entries)
+        {
+            using var s = new MemoryStream();
+            using (var z = e.Open()) z.CopyTo(s);
+            using var l = new ClosedXML.Excel.XLWorkbook(s);
+            var h = l.Worksheet(1);
+            var filas = h.LastRowUsed()!.RowNumber() - 1;
+            Assert.All(Enumerable.Range(2, filas), i => Assert.Equal(h.Cell(2, 3).GetString(), h.Cell(i, 3).GetString()));   // una sola macro área
+            suma += filas;
+        }
+        Assert.Equal(total, suma);
+
+        // Filtro por decisión: solo pendientes.
+        html = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria?evento=0&decision=PENDIENTE"));
+        Assert.DoesNotContain("badge-ok\">Continúa", html);
+    }
+
+    [Fact]
     public async Task Editar_y_eliminar_data_product_desde_seguimiento_semanal()
     {
         var client = fabrica.CreateClient();

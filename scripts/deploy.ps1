@@ -57,6 +57,7 @@ if (-not $Credencial) { $Credencial = Get-Credential -UserName $Usuario -Message
 $compartido = Split-Path -Parent $Destino
 $unidad = 'GDDeploy'
 # La unidad solo abre la sesion autenticada; las operaciones usan la ruta UNC (via la unidad, PowerShell duplica la raiz al escribir).
+New-PSDrive -Name $unidad -PSProvider FileSystem -Root $compartido -Credential $Credencial -ErrorAction Stop | Out-Null
 
 try {
     $remoto = $Destino

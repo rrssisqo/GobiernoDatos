@@ -76,7 +76,7 @@ publicación self-contained win-x64 (incluye el runtime .NET 9), hosting in-proc
 | `Autenticacion` | `Demo` (usuario de `UsuarioDemo`) | `Windows`: usuario autenticado por IIS (anónima deshabilitada) |
 | `Administradores` | — | Cuentas o grupos de AD: `MABENET\usuario`, `MABENET\Grupo` |
 
-- Administrador: Eventos y Bajas y evidencia. Equipo y Certificador: cualquier usuario autenticado.
+- Administrador: Eventos, Bajas y evidencia, y Auditoría. Equipo y Certificador: cualquier usuario autenticado.
 - El nombre visible sale de Active Directory (formato `Apellido, Nombre (PAÍS, UBICACIÓN, ÁREA)`).
 - **Un certificador se reconoce por su usuario de red** (`gd.responsable.usuario_red`, migración 003). En Eventos se
   asigna escribiendo `MABENET\usuario` (o solo `usuario`; se completa con `GobiernoDatos:DominioPredeterminado`).
@@ -105,7 +105,7 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 
 | Ruta | Pantalla | Qué hace hoy |
 |---|---|---|
-| `/` | Seguimiento semanal | Semana ISO, KPIs, tabla DP × 7 rubros por grupo responsable, filtro por gobierno, búsqueda, exportar CSV para Excel |
+| `/` | Seguimiento semanal | Semana ISO, KPIs, tabla DP × 7 rubros por grupo responsable, filtro por gobierno, búsqueda, exportar CSV para Excel, editar (nombre, gobierno, responsable) o eliminar un DP con todas sus dependencias, con confirmación |
 | `/DataProducts` | Data products | Listado y alta de DP |
 | `/DataProducts/Detalle` | Detalle de DP | Rubros DP, avance por vista con etapa, bitácora unificada, registrar avance (DP o vista), nota semanal, cerrar DP |
 | `/Vistas` | Vistas gobernadas | Pestañas Todas / Nuevas / Fuera de recertificación, uso por vista, datos del extracto (lectura) y de gobierno (editables), mover de etapa con motivo en regresos, objetos BW |
@@ -114,6 +114,7 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 | `/Recertificacion/Eventos` | Eventos | Carga del extracto → validación → abrir → cerrar, avance por macro área, historial |
 | `/Recertificacion/Mi` | Mi recertificación | Accesos de las macro áreas del certificador, Continúa/Baja al momento, comentario obligatorio en Baja, acción masiva, confirmación |
 | `/Recertificacion/Bajas` | Bajas y evidencia | Registrar ejecución con ticket, traza de auditoría, exportar evidencia CSV |
+| `/Auditoria` | Auditoría | Solo administradores. Todos los accesos de recertificación (un evento o todos) con decisión vigente y ejecución de la baja; filtros por macro área, decisión y texto; paginado de 100; exportar a Excel (.xlsx, respeta los filtros) y exportar por macro área (.zip con un .xlsx por macro área, `Data/EscritorExcel.cs`) |
 
 ## Reglas implementadas (con prueba)
 

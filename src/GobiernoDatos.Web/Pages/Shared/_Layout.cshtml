@@ -46,6 +46,11 @@
         {
             <a asp-page="/Recertificacion/Bajas" aria-current="@Activo("bajas")">Bajas y evidencia</a>
         }
+        @if (Usuario.TieneRol(RolesPortal.Administrador))
+        {
+            <div class="seccion">Auditoría</div>
+            <a asp-page="/Auditoria/Index" aria-current="@Activo("auditoria")">Auditoría</a>
+        }
         </div>
         <div class="usuario">
             <span>@Usuario.Nombre</span>
