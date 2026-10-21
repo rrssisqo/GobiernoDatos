@@ -278,3 +278,9 @@ dialog.dialogo h2 { margin: 0; font-size: 18px; }
 
 /* Secciones a las que se salta con un enlace (#certificadores, #recordatorios). */
 section[id] { scroll-margin-top: 16px; }
+
+/* Bajas y evidencia: filtros de macro área y estatus juntos. */
+.filtros-bajas { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+
+/* Acción secundaria destructiva con apariencia de enlace (Quitar ticket). */
+.enlace-peligro { border: 0; background: none; padding: 0 0 0 8px; color: var(--error-tx); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }

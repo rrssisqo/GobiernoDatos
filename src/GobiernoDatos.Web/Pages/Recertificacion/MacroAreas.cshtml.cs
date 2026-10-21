@@ -5,17 +5,20 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace GobiernoDatos.Web.Pages.Recertificacion;
 
-// ABC del catálogo GOBIERNO (extracto HANA) → macro área; antes era una tabla fija dentro de la vista HANA.
+// ABC del catálogo GOBIERNO (extracto HANA) → macro área (antes una tabla fija dentro de la vista HANA)
+// y del gerente que da el VoBo de las bajas de todas las macro áreas antes del ticket (Power Automate).
 public class MacroAreasModel(IRecertificacionService recert, IUsuarioActual usuario) : PortalPageModel
 {
     public IReadOnlyList<MapeoGobierno> Mapeos { get; private set; } = [];
     public IReadOnlyList<string> MacroAreas { get; private set; } = [];
+    public GerenteVoBo? Gerente { get; private set; }
 
     public IActionResult OnGet()
     {
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
         Mapeos = recert.MapeosGobierno();
         MacroAreas = recert.Certificadores().Select(m => m.MacroArea).ToList();
+        Gerente = recert.Gerente();
         return Page();
     }
 
@@ -28,9 +31,15 @@ public class MacroAreasModel(IRecertificacionService recert, IUsuarioActual usua
     public IActionResult OnPostEliminar(string gobierno) =>
         Admin(() => recert.EliminarMapeoGobierno(gobierno), $"{gobierno} eliminado del catálogo.");
 
-    private IActionResult Admin(Action accion, string ok)
+    public IActionResult OnPostAsignarGerente(string? usuarioRed) =>
+        Admin(() => recert.AsignarGerente(usuarioRed ?? "", usuario.Login), "Gerente asignado: autoriza las bajas de todas las macro áreas.", "gerente");
+
+    public IActionResult OnPostQuitarGerente() =>
+        Admin(() => recert.QuitarGerente(), "Se quitó el gerente.", "gerente");
+
+    private IActionResult Admin(Action accion, string ok, string? fragmento = null)
     {
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
-        return Ejecutar(accion, ok, () => RedirectToPage());
+        return Ejecutar(accion, ok, () => RedirectToPage(null, null, null, fragmento));
     }
 }

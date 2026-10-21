@@ -34,7 +34,8 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/002_portal.sql", "db/migrations/003_responsable_usuario_red.sql",
                                         "db/migrations/004_tarea_vista.sql", "db/migrations/005_avance_vista_captura_libre.sql", "db/migrations/006_calidad_marca_de_carga.sql", "db/migrations/007_avance_reportado_dp.sql",
                                         "db/migrations/008_auditoria_columnas_hana.sql", "db/migrations/009_recert_recordatorio.sql",
-                                        "db/migrations/010_recert_gobierno_macro_area.sql",
+                                        "db/migrations/010_recert_gobierno_macro_area.sql", "db/migrations/011_recert_vobo_gerente.sql",
+                                        "db/migrations/012_recert_gerente_unico.sql", "db/migrations/013_recert_anular_ticket.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -268,8 +269,36 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.Equal(1, r.Conteo.Baja);
         Assert.Throws<DomainException>(() => recert.ConfirmarMacroArea(ti.MacroAreaId, cert));      // faltan 3
         Assert.Equal(3, recert.ContinuaMasivo(mi.Accesos.Select(a => a.AccesoId), cert));
+
+        // VoBo del gerente: se pide solo al confirmar (hay bajas y gerente); sin VoBo autorizado no hay ticket.
+        recert.AsignarGerente("cprueba", "admin");                                               // un solo gerente para todas las macro áreas
+        Assert.Equal(new GerenteVoBo(cert, "Prueba, Certificador (MEX, TI)", "cprueba@mabe.com.mx"), recert.Gerente());
         recert.ConfirmarMacroArea(ti.MacroAreaId, cert);
         Assert.True(recert.Tablero(evento.EventoId)!.MacroAreas.Single(m => m.MacroArea == "TI").Confirmada);
+        BajasMacroArea Ti() => recert.Bajas(evento.EventoId)!.MacroAreas.Single(m => m.MacroArea == "TI");
+        var vobo = Ti().VoBo!;
+        Assert.Equal((EstatusVoBo.PENDIENTE, 1, "Prueba, Certificador (MEX, TI)"), (vobo.Estatus, vobo.Bajas, vobo.GerenteNombre));
+        Assert.Contains("VoBo autorizado", Assert.Throws<DomainException>(() => recert.RegistrarEjecucion(baja.AccesoId, "INC-000", null, "TI")).Message);
+
+        using (var c = db.Abrir())
+        {
+            // Lo que consulta Power Automate: la solicitud por enviar y el detalle de las bajas; luego la marca como enviada.
+            Assert.Equal("cprueba@mabe.com.mx", c.ExecuteScalar<string>("SELECT gerente_correo FROM gd.vw_recert_vobo_por_enviar WHERE vobo_id = @id", new { id = vobo.VoBoId }));
+            Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM gd.vw_recert_vobo_detalle WHERE vobo_id = @id", new { id = vobo.VoBoId }));
+            Assert.True(c.QuerySingle<bool>("gd.sp_vobo_marcar_enviada", new { vobo_id = vobo.VoBoId }, commandType: System.Data.CommandType.StoredProcedure));
+        }
+        Assert.Equal(EstatusVoBo.ENVIADA, Ti().VoBo!.Estatus);
+
+        // Un cambio de decisión cancela la solicitud; la respuesta tardía se ignora y hay que volver a pedirla.
+        recert.Decidir(baja.AccesoId, Decision.BAJA, "Ya no pertenece al área", cert);
+        Assert.Equal(EstatusVoBo.CANCELADA, Ti().VoBo!.Estatus);
+        Assert.False(recert.ResponderVoBo(vobo.VoBoId, true, "gerente@mabe.com.mx", null));
+        recert.ConfirmarMacroArea(ti.MacroAreaId, cert);                                       // vuelve a pedir el VoBo
+        var nuevo = Ti().VoBo!;
+        Assert.NotEqual(vobo.VoBoId, nuevo.VoBoId);
+        Assert.True(recert.ResponderVoBo(nuevo.VoBoId, true, "gerente@mabe.com.mx", "De acuerdo"));
+        Assert.True(Ti().Autorizada);
+        Assert.Throws<DomainException>(() => recert.SolicitarVoBo(evento.EventoId, ti.MacroAreaId, "admin"));   // ya autorizado
 
         Assert.Equal(5, recert.CerrarEvento(evento.EventoId));                                   // otras macro áreas: pendientes reportados
         Assert.Throws<DomainException>(() => recert.Decidir(baja.AccesoId, Decision.CONTINUA, null, cert));
@@ -280,6 +309,14 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.Equal(1, bajas.Ejecutadas);
         Assert.Contains(recert.Traza(baja.AccesoId), p => p.Titulo == "Decisión cambiada a Baja");
         Assert.Contains("INC-001", recert.EvidenciaCsv(evento.EventoId));
+
+        // Quitar el ticket: queda como anulado en la traza y la baja vuelve a pendiente.
+        Assert.Throws<DomainException>(() => recert.AnularEjecucion(baja.AccesoId, " ", "TI"));
+        recert.AnularEjecucion(baja.AccesoId, "Ticket equivocado", "TI");
+        Assert.Equal(0, recert.Bajas(evento.EventoId)!.Ejecutadas);
+        Assert.Contains(recert.Traza(baja.AccesoId), p => p.Titulo == "Ticket anulado" && p.Detalle.Contains("INC-001") && p.Detalle.Contains("Ticket equivocado"));
+        Assert.Throws<DomainException>(() => recert.AnularEjecucion(baja.AccesoId, "Otra vez", "TI"));
+        recert.RegistrarEjecucion(baja.AccesoId, "INC-002", null, "TI");                       // el VoBo sigue autorizado
         Assert.Equal(EstatusEvento.CERRADO, recert.Historial().Single(h => h.EventoId == evento.EventoId).Estatus);
 
         // Un extracto con un rol en dos vistas queda en borrador con rechazos y no abre; se descarta.

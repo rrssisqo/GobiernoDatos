@@ -20,6 +20,7 @@
                     @foreach (var e in Model.Eventos) { <option value="@e.EventoId" selected="@(e.EventoId == t.Evento.EventoId)">@e.Nombre · @ReglasRecertificacion.Etiqueta(e.Estatus)</option> }
                 </select>
             </label>
+            @if (Model.Macro is not null) { <input type="hidden" name="macro" value="@Model.Macro" /> }
             <a class="btn" asp-page-handler="Evidencia" asp-route-evento="@t.Evento.EventoId">Exportar evidencia</a>
         </form>
     }
@@ -32,18 +33,87 @@
 else
 {
     <section class="kpis" aria-label="Indicadores">
-        <div class="kpi"><span class="etq">Bajas decididas</span><span class="valor">@t.Decididas</span></div>
-        <div class="kpi"><span class="etq">Ejecutadas</span><span class="valor">@t.Ejecutadas</span></div>
-        <div class="kpi"><span class="etq">Pendientes de ejecución</span><span class="valor">@(t.Decididas - t.Ejecutadas)</span></div>
-        <div class="kpi"><span class="etq">Días promedio para ejecutar</span><span class="valor">@(t.DiasPromedio is null ? "—" : t.DiasPromedio.Value.ToString("0.#"))</span></div>
+        <div class="kpi"><span class="etq">Bajas decididas</span><span class="valor">@Model.DelArea.Count</span><span class="nota">@(Model.Macro ?? "Todas las macro áreas")</span></div>
+        <div class="kpi"><span class="etq">Ejecutadas</span><span class="valor">@Model.Ejecutadas</span></div>
+        <div class="kpi"><span class="etq">Pendientes de ejecución</span><span class="valor">@(Model.DelArea.Count - Model.Ejecutadas)</span><span class="nota">@Model.MacroAreas.Count(m => !m.Autorizada) macro áreas sin VoBo autorizado</span></div>
+        <div class="kpi"><span class="etq">Días promedio para ejecutar</span><span class="valor">@(Model.DiasPromedio is null ? "—" : Model.DiasPromedio.Value.ToString("0.#"))</span></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-vobo" id="vobo">
+        <div class="panel-cab">
+            <h2 id="h-vobo">VoBo del gerente por macro área</h2>
+            <span class="sutil">El ticket de una baja solo se registra con el VoBo autorizado del gerente de su macro área.</span>
+        </div>
+        @if (Model.MacroAreas.Count == 0)
+        {
+            <div class="vacio">No hay macro áreas con bajas@(Model.Macro is null ? "" : " en " + Model.Macro).</div>
+        }
+        else
+        {
+            <div class="tabla-scroll">
+                <table class="tabla" id="tabla-vobo">
+                    <thead><tr><th>Macro área</th><th class="derecha">Bajas</th><th class="derecha">Ejecutadas</th><th>Gerente</th><th>VoBo</th><th><span class="oculto-visual">Acción</span></th></tr></thead>
+                    <tbody>
+                        @foreach (var m in Model.MacroAreas)
+                        {
+                            var v = m.VoBo;
+                            <tr data-macro="@m.MacroArea">
+                                <td>@m.MacroArea</td>
+                                <td class="num">@m.Bajas</td>
+                                <td class="num">@m.Ejecutadas</td>
+                                <td>@if (m.Gerente is null) { <a asp-page="MacroAreas" asp-fragment="gerente"><span class="badge badge-aviso">Sin gerente</span></a> }
+                                    else { @m.Gerente.Nombre<span class="secundario">@m.Gerente.Correo</span> }</td>
+                                <td>
+                                    @switch (v?.Estatus)
+                                    {
+                                        case null: <span class="badge badge-neutro">Sin solicitar</span> break;
+                                        case EstatusVoBo.PENDIENTE: <span class="badge badge-aviso">Por enviar</span><span class="secundario">Solicitado @Ui.FechaHora(v.FechaSolicitud) · @v.SolicitadoPor</span> break;
+                                        case EstatusVoBo.ENVIADA: <span class="badge badge-aviso">Esperando al gerente</span><span class="secundario">Enviado @Ui.FechaHora(v.FechaEnvio!.Value) a @v.GerenteNombre</span> break;
+                                        case EstatusVoBo.AUTORIZADA: <span class="badge badge-ok">Autorizado</span><span class="secundario">@v.RespondidoPor · @Ui.FechaHora(v.FechaRespuesta!.Value)@(v.Comentario is null ? "" : " · " + v.Comentario)</span> break;
+                                        case EstatusVoBo.RECHAZADA: <span class="badge badge-error">Rechazado</span><span class="secundario">@v.RespondidoPor · @Ui.FechaHora(v.FechaRespuesta!.Value)@(v.Comentario is null ? "" : " · " + v.Comentario)</span> break;
+                                        default: <span class="badge badge-neutro">Cancelado</span><span class="secundario">@v.MotivoCancelacion</span> break;
+                                    }
+                                </td>
+                                <td>
+                                    @if (m.Autorizada) { }
+                                    else if (m.PorDecidir > 0 && t.Evento.Estatus == EstatusEvento.ABIERTO)
+                                    {
+                                        <span class="ayuda">Faltan @m.PorDecidir decisiones del certificador</span>
+                                    }
+                                    else if (m.Gerente is null)
+                                    {
+                                        <span class="ayuda">Asigna el gerente en Macro áreas</span>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" asp-page-handler="SolicitarVoBo" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" asp-route-macro="@Model.Macro" class="inline"
+                                              data-confirmar="Se pedirá a @m.Gerente.Nombre el VoBo de @m.Bajas bajas de @m.MacroArea por Power Automate. ¿Continuar?">
+                                            <input type="hidden" name="macroAreaId" value="@m.MacroAreaId" />
+                                            <input type="hidden" name="macroArea" value="@m.MacroArea" />
+                                            <button type="submit" class="btn btn-chico">@(m.SolicitudActiva ? "Volver a solicitar" : "Solicitar VoBo")</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </section>
 
     <div class="dos-columnas">
         <section class="panel" aria-labelledby="h-b">
             <div class="panel-cab">
                 <h2 id="h-b">Bajas del evento</h2>
-                <form method="get" class="compacto">
+                <form method="get" class="compacto filtros-bajas">
                     <input type="hidden" name="evento" value="@t.Evento.EventoId" />
+                    <label class="campo en-linea">Macro área
+                        <select name="macro" data-autosubmit>
+                            <option value="">Todas</option>
+                            @foreach (var m in t.MacroAreas) { <option value="@m.MacroArea" selected="@(m.MacroArea == Model.Macro)">@m.MacroArea</option> }
+                        </select>
+                    </label>
                     <label class="campo en-linea">Estatus
                         <select name="estatus" data-autosubmit>
                             <option value="">Todas</option>
@@ -65,7 +135,8 @@ else
                         <tbody>
                             @foreach (var f in Model.Filas)
                             {
-                                var url = Url.Page("Bajas", new { evento = t.Evento.EventoId, estatus = Model.Estatus, acceso = f.AccesoId });
+                                var url = Url.Page("Bajas", new { evento = t.Evento.EventoId, estatus = Model.Estatus, macro = Model.Macro, acceso = f.AccesoId });
+                                var area = Model.AreaDe(f);
                                 <tr class="@(sel?.AccesoId == f.AccesoId ? "seleccionada" : "")">
                                     <td><a href="@url">@f.UsuarioNombre</a><span class="secundario">@f.UsuarioCodigo</span></td>
                                     <td class="ruta"><span class="mono" style="font-size:12px">@f.Vista</span><span class="secundario">@f.Rol</span></td>
@@ -76,11 +147,16 @@ else
                                         @if (f.Ejecucion is not null)
                                         {
                                             <span class="badge badge-ok">Ejecutada · @Ui.Fecha(f.Ejecucion.FechaEjecucion)</span>
-                                            <span class="secundario">Ticket @f.Ejecucion.Ticket</span>
+                                            <span class="secundario">Ticket @f.Ejecucion.Ticket
+                                                <button type="button" class="enlace-peligro" data-anular="@f.AccesoId" data-ticket="@f.Ejecucion.Ticket" data-usuario="@f.UsuarioNombre">Quitar ticket</button></span>
+                                        }
+                                        else if (area?.Autorizada != true)
+                                        {
+                                            <span class="badge badge-aviso">Requiere VoBo del gerente</span>
                                         }
                                         else
                                         {
-                                            <form method="post" asp-page-handler="Ejecutar" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" class="form-fila compacto" style="min-width:260px">
+                                            <form method="post" asp-page-handler="Ejecutar" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" asp-route-macro="@Model.Macro" class="form-fila compacto" style="min-width:260px">
                                                 <input type="hidden" name="accesoId" value="@f.AccesoId" />
                                                 <input type="text" name="ticket" aria-label="Ticket" placeholder="Ticket" required maxlength="60" style="flex:1 1 100px" />
                                                 <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Registrar ejecución</button>
@@ -119,4 +195,44 @@ else
             </div>
         </aside>
     </div>
+}
+
+@if (t is not null)
+{
+    <dialog id="dlg-anular" class="dialogo" aria-labelledby="h-anular">
+        <form method="post" asp-page-handler="Anular" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" asp-route-macro="@Model.Macro" id="form-anular">
+            <h2 id="h-anular">Quitar el ticket <span class="mono" id="anular-ticket"></span></h2>
+            <p class="ayuda">Baja de <strong id="anular-usuario"></strong>. El ticket queda como anulado en la traza de auditoría y la baja vuelve a
+               pendiente de ejecución; para registrar otro ticket se necesita el VoBo autorizado del gerente.</p>
+            <input type="hidden" name="accesoId" />
+            <input type="hidden" name="ticket" />
+            <label class="campo">Motivo *
+                <textarea name="motivo" rows="3" required maxlength="500" placeholder="Por qué se quita el ticket"></textarea>
+            </label>
+            <div class="form-fila" style="justify-content:flex-end">
+                <button type="button" class="btn" id="btn-cancelar-anular" style="flex:0 0 auto">Cancelar</button>
+                <button type="submit" class="btn btn-peligro" style="flex:0 0 auto">Quitar ticket</button>
+            </div>
+        </form>
+    </dialog>
+}
+
+@section Scripts {
+<script>
+(() => {
+    const dlg = document.getElementById('dlg-anular');
+    if (!dlg) return;
+    const f = document.getElementById('form-anular');
+    document.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
+        f.elements.accesoId.value = b.dataset.anular;
+        f.elements.ticket.value = b.dataset.ticket;
+        f.elements.motivo.value = '';
+        document.getElementById('anular-ticket').textContent = b.dataset.ticket;
+        document.getElementById('anular-usuario').textContent = b.dataset.usuario;
+        dlg.showModal();
+        f.elements.motivo.focus();
+    }));
+    document.getElementById('btn-cancelar-anular').addEventListener('click', () => dlg.close());
+})();
+</script>
 }

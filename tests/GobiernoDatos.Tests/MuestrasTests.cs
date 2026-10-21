@@ -152,6 +152,12 @@ public class MuestrasTests
         Assert.Throws<DomainException>(() => _recert.Decidir(baja.AccesoId, Decision.CONTINUA, null, DemoLogin));
 
         Assert.Throws<DomainException>(() => _recert.RegistrarEjecucion(baja.AccesoId, " ", null, "TI"));
+        // Sin VoBo del gerente no hay ticket; se pide (también con el evento cerrado) y se autoriza.
+        Assert.Contains("VoBo", Assert.Throws<DomainException>(() => _recert.RegistrarEjecucion(baja.AccesoId, "INC-001", null, "TI")).Message);
+        Assert.Throws<DomainException>(() => _recert.SolicitarVoBo(evento.EventoId, macro.MacroAreaId, "admin"));   // sin gerente
+        _recert.AsignarGerente("gerenteti", "admin");
+        var vobo = _recert.SolicitarVoBo(evento.EventoId, macro.MacroAreaId, "admin");
+        Assert.True(_recert.ResponderVoBo(vobo, true, "gerenteti@ejemplo.local", null));
         _recert.RegistrarEjecucion(baja.AccesoId, "INC-001", null, "TI");
         var bajas = _recert.Bajas(evento.EventoId)!;
         Assert.Equal(1, bajas.Ejecutadas);

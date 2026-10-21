@@ -238,6 +238,10 @@ public sealed record MapeoGobierno(string Gobierno, string MacroArea, string Usu
 public sealed record RecertRecordatorio(int EventoId, string Certificador, string? UsuarioRed, string? Correo, string MacroAreas,
                                         int Pendientes, bool Enviado, string? Error, string EnviadoPor, DateTime Fecha);
 
+// Ticket de baja anulado (gd.recert_baja_ejecucion_anulada, migración 013).
+public sealed record RecertBajaAnulada(long AccesoId, string Ticket, DateOnly FechaEjecucion, string EjecutadoPor, string Motivo,
+                                       string AnuladoPor, DateTime FechaAnulacion);
+
 public sealed class RecertBajaEjecucion
 {
     public long AccesoId { get; init; }

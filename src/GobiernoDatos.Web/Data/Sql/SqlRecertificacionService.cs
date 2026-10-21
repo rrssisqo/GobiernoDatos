@@ -272,6 +272,16 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
         c.Execute("gd.sp_confirmar_macro_area",
             new { evento_id = eventoId, macro_area_id = macroAreaId, responsable_id = responsableId, usuario = LoginParaBuscar(certificador) },
             commandType: CommandType.StoredProcedure);
+        // El certificador terminó: si hay bajas y gerente, y no hay solicitud vigente, se pide el VoBo.
+        var pedir = c.ExecuteScalar<int>("""
+            SELECT CASE WHEN EXISTS (SELECT 1 FROM gd.recert_gerente)
+                         AND EXISTS (SELECT 1 FROM gd.vw_recert_evidencia WHERE evento_id = @eventoId AND macro_area_id = @macroAreaId AND decision = 'BAJA')
+                         AND NOT EXISTS (SELECT 1 FROM gd.recert_vobo WHERE evento_id = @eventoId AND macro_area_id = @macroAreaId
+                                         AND estatus IN ('PENDIENTE','ENVIADA','AUTORIZADA')) THEN 1 ELSE 0 END
+            """, new { eventoId, macroAreaId });
+        if (pedir == 1)
+            c.Execute("gd.sp_vobo_solicitar", new { evento_id = eventoId, macro_area_id = macroAreaId, solicitado_por = LoginParaBuscar(certificador) },
+                      commandType: CommandType.StoredProcedure);
         return 0;
     });
 
@@ -301,12 +311,52 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
         var ejecutadas = filas.Where(f => f.Ejecucion is not null).ToList();
         decimal? dias = ejecutadas.Count == 0 ? null
             : (decimal)ejecutadas.Average(f => f.Ejecucion!.FechaEjecucion.DayNumber - DateOnly.FromDateTime(f.FechaDecision).DayNumber);
-        return new TableroBajas(evento, filas, filas.Count, ejecutadas.Count, dias);
+        return new TableroBajas(evento, filas, filas.Count, ejecutadas.Count, dias, MacroAreasBajas(c, eventoId));
+    }
+
+    private sealed record MacroBajasRow(int macro_area_id, string macro_area, int bajas, int ejecutadas, int por_decidir);
+    private sealed record GerenteRow(string usuario_red, string nombre, string correo);
+    private sealed record VoBoRow(long vobo_id, int evento_id, int macro_area_id, string gerente_nombre, string gerente_correo, int bajas,
+                                  string estatus, string solicitado_por, DateTime fecha_solicitud, DateTime? fecha_envio, DateTime? fecha_respuesta,
+                                  string? respondido_por, string? comentario_respuesta, string? motivo_cancelacion);
+
+    private static VoBoGerente VoBo(VoBoRow v) => new(v.vobo_id, v.evento_id, v.macro_area_id, v.gerente_nombre, v.gerente_correo, v.bajas,
+        Enum.Parse<EstatusVoBo>(v.estatus), v.solicitado_por, v.fecha_solicitud, v.fecha_envio, v.fecha_respuesta, v.respondido_por,
+        v.comentario_respuesta, v.motivo_cancelacion);
+
+    // Macro áreas con bajas en el evento: conteos, gerente y última solicitud de VoBo.
+    private static List<BajasMacroArea> MacroAreasBajas(IDbConnection c, int eventoId)
+    {
+        using var m = c.QueryMultiple("""
+            SELECT e.macro_area_id, e.macro_area,
+                   SUM(CASE WHEN e.decision = 'BAJA' THEN 1 ELSE 0 END) AS bajas,
+                   SUM(CASE WHEN e.decision = 'BAJA' AND e.ticket IS NOT NULL THEN 1 ELSE 0 END) AS ejecutadas,
+                   SUM(CASE WHEN e.decision = 'PENDIENTE' THEN 1 ELSE 0 END) AS por_decidir
+            FROM gd.vw_recert_evidencia AS e
+            WHERE e.evento_id = @eventoId
+            GROUP BY e.macro_area_id, e.macro_area
+            HAVING SUM(CASE WHEN e.decision = 'BAJA' THEN 1 ELSE 0 END) > 0
+            ORDER BY e.macro_area;
+
+            SELECT v.vobo_id, v.evento_id, v.macro_area_id, v.gerente_nombre, v.gerente_correo, v.bajas, v.estatus, v.solicitado_por,
+                   v.fecha_solicitud, v.fecha_envio, v.fecha_respuesta, v.respondido_por, v.comentario_respuesta, v.motivo_cancelacion
+            FROM gd.recert_vobo AS v
+            WHERE v.evento_id = @eventoId
+              AND v.vobo_id = (SELECT MAX(x.vobo_id) FROM gd.recert_vobo AS x WHERE x.evento_id = v.evento_id AND x.macro_area_id = v.macro_area_id);
+
+            SELECT usuario_red, nombre, correo FROM gd.recert_gerente;
+            """, new { eventoId });
+        var macros = m.Read<MacroBajasRow>().ToList();
+        var vobos = m.Read<VoBoRow>().ToDictionary(v => v.macro_area_id, VoBo);
+        var gerente = m.ReadSingleOrDefault<GerenteRow>() is { } g ? new GerenteVoBo(g.usuario_red, g.nombre, g.correo) : null;
+        return macros.Select(x => new BajasMacroArea(x.macro_area_id, x.macro_area, x.bajas, x.ejecutadas, x.por_decidir,
+            gerente, vobos.GetValueOrDefault(x.macro_area_id))).ToList();
     }
 
     private sealed record IncluidoRow(string nombre, DateTime fecha, int accesos_3m);
     private sealed record DecisionRow(string decision, string? comentario, string nombre, DateTime fecha_registro);
     private sealed record EjecucionRow(DateTime fecha_ejecucion, string ticket, string ejecutado_por);
+    private sealed record AnuladaRow(DateTime fecha_ejecucion, string ticket, string ejecutado_por, string motivo, string anulado_por, DateTime fecha_anulacion);
 
     public IReadOnlyList<PasoTraza> Traza(long accesoId)
     {
@@ -318,6 +368,8 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             FROM gd.recert_decision AS d JOIN gd.responsable AS r ON r.responsable_id = d.decidido_por
             WHERE d.acceso_id = @accesoId ORDER BY d.decision_id;
             SELECT fecha_ejecucion, ticket, ejecutado_por FROM gd.recert_baja_ejecucion WHERE acceso_id = @accesoId;
+            SELECT fecha_ejecucion, ticket, ejecutado_por, motivo, anulado_por, fecha_anulacion
+            FROM gd.recert_baja_ejecucion_anulada WHERE acceso_id = @accesoId ORDER BY anulacion_id;
             """, new { accesoId });
         var incluido = m.ReadSingleOrDefault<IncluidoRow>();
         if (incluido is null) return [];
@@ -332,7 +384,13 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             pasos.Add(new(d.fecha_registro, titulo, d.nombre + (d.comentario is null ? "" : " · " + d.comentario)));
             previa = actual;
         }
-        if (m.ReadSingleOrDefault<EjecucionRow>() is { } ej)
+        var ejecucion = m.ReadSingleOrDefault<EjecucionRow>();
+        foreach (var an in m.Read<AnuladaRow>())
+        {
+            pasos.Add(new(an.fecha_ejecucion, "Rol retirado", $"{an.ejecutado_por} · ticket {an.ticket}"));
+            pasos.Add(new(an.fecha_anulacion, "Ticket anulado", $"{an.anulado_por} · ticket {an.ticket} · {an.motivo}"));
+        }
+        if (ejecucion is { } ej)
             pasos.Add(new(ej.fecha_ejecucion, "Rol retirado", $"{ej.ejecutado_por} · ticket {ej.ticket}"));
         return pasos;
     }
@@ -340,6 +398,9 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
     public void RegistrarEjecucion(long accesoId, string ticket, DateOnly? fecha, string usuario) =>
         Sp("gd.sp_registrar_baja_ejecucion",
            new { acceso_id = accesoId, ticket, ejecutado_por = usuario, fecha_ejecucion = fecha?.ToDateTime(TimeOnly.MinValue) });
+
+    public void AnularEjecucion(long accesoId, string motivo, string usuario) =>
+        Sp("gd.sp_anular_baja_ejecucion", new { acceso_id = accesoId, motivo, anulado_por = usuario });
 
     private sealed record EvidenciaRow(string evento, string estatus_evento, string macro_area, string usuario, string nombre_usuario,
                                        string rol, string vista, int accesos_3m, string decision, string? comentario, string? decidido_por,
@@ -464,6 +525,49 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
         using var c = db.Abrir();
         if (c.Execute("DELETE FROM gd.recert_gobierno_macro_area WHERE gobierno = @g", new { g = gobierno.Trim() }) == 0)
             throw new DomainException($"El gobierno {gobierno} no está en el catálogo.");
+    }
+
+    // ---- Gerentes y VoBo (migración 011) ----
+
+    public GerenteVoBo? Gerente()
+    {
+        using var c = db.Abrir();
+        return c.QuerySingleOrDefault<GerenteRow>("SELECT usuario_red, nombre, correo FROM gd.recert_gerente") is { } g
+            ? new GerenteVoBo(g.usuario_red, g.nombre, g.correo) : null;
+    }
+
+    public void AsignarGerente(string usuarioRed, string usuario)
+    {
+        var login = Login(usuarioRed);
+        var nombre = directorio.BuscarNombre(login) ?? throw new DomainException($"El usuario {login} no existe en Active Directory.");
+        var correo = directorio.BuscarCorreo(login) ?? throw new DomainException($"{nombre} no tiene correo en Active Directory: Power Automate no podría pedirle el VoBo.");
+        using var c = db.Abrir();
+        c.Execute("""
+            MERGE gd.recert_gerente WITH (HOLDLOCK) AS t
+            USING (SELECT CAST(1 AS TINYINT) AS gerente_id) AS s ON t.gerente_id = s.gerente_id
+            WHEN MATCHED THEN UPDATE SET usuario_red = @login, nombre = @nombre, correo = @correo, usuario = @usuario, fecha_registro = SYSDATETIME()
+            WHEN NOT MATCHED THEN INSERT (gerente_id, usuario_red, nombre, correo, usuario) VALUES (1, @login, @nombre, @correo, @usuario);
+            """, new { login, nombre, correo, usuario });
+    }
+
+    public void QuitarGerente()
+    {
+        using var c = db.Abrir();
+        if (c.Execute("DELETE FROM gd.recert_gerente") == 0) throw new DomainException("No hay gerente asignado.");
+    }
+
+    public long SolicitarVoBo(int eventoId, int macroAreaId, string usuario) => Negocio(() =>
+    {
+        using var c = db.Abrir();
+        return c.ExecuteScalar<long>("gd.sp_vobo_solicitar", new { evento_id = eventoId, macro_area_id = macroAreaId, solicitado_por = usuario },
+                                     commandType: CommandType.StoredProcedure);
+    });
+
+    public bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario)
+    {
+        using var c = db.Abrir();
+        return c.QuerySingle<bool>("gd.sp_vobo_responder",
+            new { vobo_id = voboId, autorizada, respondido_por = respondidoPor, comentario }, commandType: CommandType.StoredProcedure);
     }
 
     // La macro área se busca por nombre y se da de alta si no existe.

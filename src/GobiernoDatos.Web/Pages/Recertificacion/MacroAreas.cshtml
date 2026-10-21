@@ -8,12 +8,45 @@
 <header class="encabezado">
     <div class="titulo">
         <h1>Macro áreas</h1>
-        <p>A qué macro área va cada GOBIERNO del extracto de HANA al cargar un evento de recertificación</p>
+        <p>A qué macro área va cada GOBIERNO del extracto de HANA y quién autoriza las bajas</p>
     </div>
     <div class="acciones">
         <a class="btn" asp-page="Eventos" asp-fragment="certificadores">Certificadores</a>
     </div>
 </header>
+
+<section class="panel" aria-labelledby="h-gerente" id="gerente">
+    <div class="panel-cab">
+        <h2 id="h-gerente">Gerente que autoriza las bajas</h2>
+        <span class="sutil">Da el VoBo de las bajas de todas las macro áreas (Power Automate) antes de que TI registre el ticket.</span>
+    </div>
+    <div class="panel-cuerpo form-fila">
+        <div style="flex:1 1 280px">
+            @if (Model.Gerente is null)
+            {
+                <span class="badge badge-aviso">Sin gerente</span>
+                <span class="ayuda" style="display:block">Sin gerente no se pueden pedir los VoBo ni registrar tickets.</span>
+            }
+            else
+            {
+                <form method="post" asp-page-handler="QuitarGerente" class="inline" data-confirmar="¿Quitar a @Model.Gerente.Nombre como gerente?">
+                    <span class="badge badge-ok">@Model.Gerente.Nombre · @Model.Gerente.UsuarioRed
+                        <button type="submit" title="Quitar" style="border:0;background:none;cursor:pointer;padding:0 0 0 6px;color:inherit">✕</button></span>
+                    <span class="secundario">@Model.Gerente.Correo</span>
+                </form>
+            }
+        </div>
+        <form method="post" asp-page-handler="AsignarGerente" class="form-fila compacto" id="form-gerente" style="flex:2 1 420px">
+            <div class="buscador-usuario" style="flex:2 1 260px">
+                <input type="text" name="usuarioRed" required maxlength="100" autocomplete="off" placeholder="Buscar en Entra ID: nombre, correo o MABENET\usuario"
+                       aria-label="Buscar gerente" role="combobox" aria-autocomplete="list" aria-expanded="false"
+                       aria-controls="sugerencias-usuario" data-buscar-usuario="@Url.Page("Eventos", "BuscarUsuarios")" />
+                <span class="ayuda seleccionado" aria-live="polite"></span>
+            </div>
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">@(Model.Gerente is null ? "Asignar" : "Cambiar")</button>
+        </form>
+    </div>
+</section>
 
 <section class="panel" aria-labelledby="h-nuevo">
     <form method="post" asp-page-handler="Crear" class="panel-cuerpo" id="form-mapeo">

@@ -29,7 +29,26 @@ public sealed record ResultadoDecision(long AccesoId, Decision Decision, string?
 public sealed record FilaBaja(long AccesoId, string UsuarioCodigo, string UsuarioNombre, string Vista, string Rol, string MacroArea,
                               string DecididoPor, DateTime FechaDecision, string? Comentario, RecertBajaEjecucion? Ejecucion);
 
-public sealed record TableroBajas(RecertEvento Evento, IReadOnlyList<FilaBaja> Filas, int Decididas, int Ejecutadas, decimal? DiasPromedio);
+// VoBo del gerente (gd.recert_vobo, migración 011). Power Automate lo envía y registra la respuesta.
+public enum EstatusVoBo { PENDIENTE, ENVIADA, AUTORIZADA, RECHAZADA, CANCELADA }
+
+// Gerente único: autoriza las bajas de todas las macro áreas (gd.recert_gerente, migración 012).
+public sealed record GerenteVoBo(string UsuarioRed, string Nombre, string Correo);
+
+public sealed record VoBoGerente(long VoBoId, int EventoId, int MacroAreaId, string GerenteNombre, string GerenteCorreo, int Bajas,
+                                 EstatusVoBo Estatus, string SolicitadoPor, DateTime FechaSolicitud, DateTime? FechaEnvio,
+                                 DateTime? FechaRespuesta, string? RespondidoPor, string? Comentario, string? MotivoCancelacion);
+
+// Bajas de una macro área en el evento, con su gerente y su última solicitud de VoBo.
+public sealed record BajasMacroArea(int MacroAreaId, string MacroArea, int Bajas, int Ejecutadas, int PorDecidir,
+                                    GerenteVoBo? Gerente, VoBoGerente? VoBo)
+{
+    public bool Autorizada => VoBo?.Estatus == EstatusVoBo.AUTORIZADA;
+    public bool SolicitudActiva => VoBo?.Estatus is EstatusVoBo.PENDIENTE or EstatusVoBo.ENVIADA or EstatusVoBo.AUTORIZADA;
+}
+
+public sealed record TableroBajas(RecertEvento Evento, IReadOnlyList<FilaBaja> Filas, int Decididas, int Ejecutadas, decimal? DiasPromedio,
+                                  IReadOnlyList<BajasMacroArea> MacroAreas);
 
 // Auditoría: un renglón por acceso con las columnas de la consulta HANA (CONT_TI_RECERTIFICACION), en su orden.
 // AreaResponsable = macro área; OKBAJA y COMENTARIOS = decisión vigente y comentario capturados en el portal.
@@ -65,6 +84,8 @@ public interface IRecertificacionService
     TableroBajas? Bajas(int eventoId);
     IReadOnlyList<PasoTraza> Traza(long accesoId);
     void RegistrarEjecucion(long accesoId, string ticket, DateOnly? fecha, string usuario);
+    // Quita un ticket mal capturado: se conserva como anulado (motivo, quién, cuándo) y la baja vuelve a pendiente.
+    void AnularEjecucion(long accesoId, string motivo, string usuario);
     string EvidenciaCsv(int eventoId);
     // Todos los accesos de un evento (o de todos los eventos si es nulo), ordenados por evento, macro área, vista y usuario.
     IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId);
@@ -76,6 +97,14 @@ public interface IRecertificacionService
     void CrearMapeoGobierno(string gobierno, string macroArea, string usuario);
     void CambiarMapeoGobierno(string gobierno, string macroArea, string usuario);
     void EliminarMapeoGobierno(string gobierno);
+    // Gerente que autoriza las bajas de todas las macro áreas antes del ticket. Nombre y correo salen del directorio.
+    GerenteVoBo? Gerente();
+    void AsignarGerente(string usuarioRed, string usuario);
+    void QuitarGerente();
+    // Crea la solicitud de VoBo que Power Automate envía al gerente. Devuelve su id.
+    long SolicitarVoBo(int eventoId, int macroAreaId, string usuario);
+    // Respuesta del gerente (en producción la registra Power Automate con gd.sp_vobo_responder). Devuelve si se registró.
+    bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario);
     IReadOnlyList<CertificadoresMacroArea> Certificadores();
     // El certificador se identifica por su usuario de red (DOMINIO\usuario); el nombre sale del directorio.
     void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo);
@@ -224,6 +253,7 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                 Comentario = string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim(), DecididoPor = NombreDe(LoginParaBuscar(certificador)), FechaRegistro = s.Ahora,
             });
             e.Confirmaciones.RemoveAll(c => c.MacroAreaId == a.MacroAreaId);   // un cambio invalida la confirmación previa
+            CancelarVoBo(e.EventoId, a.MacroAreaId);                           // y el VoBo del gerente (tr_recert_decision_vobo)
             return new(accesoId, decision, comentario?.Trim(), ConteoMacro(e.EventoId, a.MacroAreaId));
         }
     }
@@ -245,6 +275,7 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                     DecisionId = s.NuevoId(), AccesoId = id, Decision = Decision.CONTINUA, DecididoPor = NombreDe(LoginParaBuscar(certificador)),
                     Comentario = "Acción masiva", FechaRegistro = s.Ahora,
                 });
+                CancelarVoBo(e.EventoId, a.MacroAreaId);
                 n++;
             }
             return n;
@@ -261,6 +292,9 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             if (conteo.Pendientes > 0) throw new DomainException($"Faltan {conteo.Pendientes} accesos por decidir.");
             e.Confirmaciones.RemoveAll(c => c.MacroAreaId == macroAreaId);
             e.Confirmaciones.Add(new ConfirmacionMacroArea(macroAreaId, LoginParaBuscar(certificador), s.Ahora));
+            // El certificador terminó: si hay bajas y gerente, se pide el VoBo.
+            if (conteo.Baja > 0 && s.GerenteVoBo is not null && !VoBoActivo(e.EventoId, macroAreaId))
+                SolicitarVoBo(e.EventoId, macroAreaId, LoginParaBuscar(certificador));
         }
     }
 
@@ -281,7 +315,14 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             var ejecutadas = filas.Where(f => f.Ejecucion is not null).ToList();
             decimal? dias = ejecutadas.Count == 0 ? null
                 : (decimal)ejecutadas.Average(f => f.Ejecucion!.FechaEjecucion.DayNumber - DateOnly.FromDateTime(f.FechaDecision).DayNumber);
-            return new TableroBajas(e, filas, filas.Count, ejecutadas.Count, dias);
+            var macros = Vigentes(eventoId).GroupBy(x => x.Acceso.MacroAreaId)
+                .Where(g => g.Any(x => x.Decision?.Decision == Decision.BAJA))
+                .Select(g => new BajasMacroArea(g.Key, s.MacroAreas.First(m => m.MacroAreaId == g.Key).Nombre,
+                    g.Count(x => x.Decision?.Decision == Decision.BAJA), g.Count(x => s.BajasEjecutadas.Any(b => b.AccesoId == x.Acceso.AccesoId)),
+                    g.Count(x => x.Decision is null), s.GerenteVoBo,
+                    s.VoBos.Where(v => v.EventoId == eventoId && v.MacroAreaId == g.Key).MaxBy(v => v.VoBoId)))
+                .OrderBy(m => m.MacroArea).ToList();
+            return new TableroBajas(e, filas, filas.Count, ejecutadas.Count, dias, macros);
         }
     }
 
@@ -306,6 +347,11 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                 pasos.Add(new(d.FechaRegistro, titulo, d.DecididoPor + (d.Comentario is null ? "" : " · " + d.Comentario)));
                 previa = d.Decision;
             }
+            foreach (var an in s.BajasAnuladas.Where(b => b.AccesoId == accesoId))
+            {
+                pasos.Add(new(an.FechaEjecucion.ToDateTime(TimeOnly.MinValue), "Rol retirado", $"{an.EjecutadoPor} · ticket {an.Ticket}"));
+                pasos.Add(new(an.FechaAnulacion, "Ticket anulado", $"{an.AnuladoPor} · ticket {an.Ticket} · {an.Motivo}"));
+            }
             if (s.BajasEjecutadas.FirstOrDefault(b => b.AccesoId == accesoId) is { } ej)
                 pasos.Add(new(ej.FechaEjecucion.ToDateTime(TimeOnly.MinValue), "Rol retirado", $"{ej.EjecutadoPor} · ticket {ej.Ticket}"));
             return pasos;
@@ -318,9 +364,23 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
         {
             if (!s.Accesos.Any(a => a.AccesoId == accesoId)) throw new DomainException("El acceso no existe.");
             ReglasRecertificacion.ValidarEjecucionBaja(s.DecisionVigente(accesoId)?.Decision, s.BajasEjecutadas.Any(b => b.AccesoId == accesoId), ticket);
+            var acceso = s.Accesos.First(a => a.AccesoId == accesoId);
+            if (!s.VoBos.Any(v => v.EventoId == acceso.EventoId && v.MacroAreaId == acceso.MacroAreaId && v.Estatus == EstatusVoBo.AUTORIZADA))
+                throw new DomainException("La baja requiere el VoBo autorizado del gerente de la macro área.");
             var f = fecha ?? s.Hoy;
             if (f > s.Hoy) throw new DomainException("La fecha de ejecución no puede ser futura.");
             s.BajasEjecutadas.Add(new RecertBajaEjecucion { AccesoId = accesoId, Ticket = ticket.Trim(), FechaEjecucion = f, EjecutadoPor = usuario });
+        }
+    }
+
+    public void AnularEjecucion(long accesoId, string motivo, string usuario)
+    {
+        if (string.IsNullOrWhiteSpace(motivo)) throw new DomainException("Indica el motivo para quitar el ticket.");
+        lock (s.Sync)
+        {
+            var ej = s.BajasEjecutadas.FirstOrDefault(b => b.AccesoId == accesoId) ?? throw new DomainException("La baja no tiene ticket registrado.");
+            s.BajasEjecutadas.Remove(ej);
+            s.BajasAnuladas.Add(new RecertBajaAnulada(accesoId, ej.Ticket, ej.FechaEjecucion, ej.EjecutadoPor, motivo.Trim(), usuario, s.Ahora));
         }
     }
 
@@ -418,6 +478,76 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
     {
         lock (s.Sync)
             if (!s.MapeoGobiernos.Remove(gobierno.Trim())) throw new DomainException($"El gobierno {gobierno} no está en el catálogo.");
+    }
+
+    public GerenteVoBo? Gerente()
+    {
+        lock (s.Sync) return s.GerenteVoBo;
+    }
+
+    public void AsignarGerente(string usuarioRed, string usuario)
+    {
+        var login = Login(usuarioRed);
+        var nombre = directorio.BuscarNombre(login) ?? throw new DomainException($"El usuario {login} no existe en Active Directory.");
+        var correo = directorio.BuscarCorreo(login) ?? throw new DomainException($"{nombre} no tiene correo en Active Directory: Power Automate no podría pedirle el VoBo.");
+        lock (s.Sync) s.GerenteVoBo = new GerenteVoBo(login, nombre, correo);
+    }
+
+    public void QuitarGerente()
+    {
+        lock (s.Sync)
+        {
+            if (s.GerenteVoBo is null) throw new DomainException("No hay gerente asignado.");
+            s.GerenteVoBo = null;
+        }
+    }
+
+    public long SolicitarVoBo(int eventoId, int macroAreaId, string usuario)
+    {
+        lock (s.Sync)
+        {
+            var e = Evento(eventoId);
+            if (e.Estatus == EstatusEvento.BORRADOR) throw new DomainException("El evento todavía no está abierto.");
+            var conteo = ConteoMacro(eventoId, macroAreaId);
+            if (e.Estatus == EstatusEvento.ABIERTO && conteo.Pendientes > 0)
+                throw new DomainException("La macro área todavía tiene accesos por decidir: el VoBo se pide cuando el certificador termina.");
+            if (conteo.Baja == 0) throw new DomainException("La macro área no tiene bajas que autorizar.");
+            var g = s.GerenteVoBo ?? throw new DomainException("No hay gerente asignado para el VoBo de las bajas (Recertificación → Macro áreas).");
+            if (s.VoBos.Any(v => v.EventoId == eventoId && v.MacroAreaId == macroAreaId && v.Estatus == EstatusVoBo.AUTORIZADA))
+                throw new DomainException("El gerente ya autorizó las bajas de esta macro área.");
+            for (int i = 0; i < s.VoBos.Count; i++)
+                if (s.VoBos[i] is { Estatus: EstatusVoBo.PENDIENTE or EstatusVoBo.ENVIADA } v && v.EventoId == eventoId && v.MacroAreaId == macroAreaId)
+                    s.VoBos[i] = v with { Estatus = EstatusVoBo.CANCELADA, MotivoCancelacion = "Reemplazada por una nueva solicitud" };
+            var vobo = new VoBoGerente(s.NuevoId(), eventoId, macroAreaId, g.Nombre, g.Correo, conteo.Baja, EstatusVoBo.PENDIENTE,
+                                       usuario, s.Ahora, null, null, null, null, null);
+            s.VoBos.Add(vobo);
+            return vobo.VoBoId;
+        }
+    }
+
+    public bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario)
+    {
+        lock (s.Sync)
+        {
+            var i = s.VoBos.FindIndex(v => v.VoBoId == voboId);
+            if (i < 0 || s.VoBos[i].Estatus is not (EstatusVoBo.PENDIENTE or EstatusVoBo.ENVIADA)) return false;
+            s.VoBos[i] = s.VoBos[i] with
+            {
+                Estatus = autorizada ? EstatusVoBo.AUTORIZADA : EstatusVoBo.RECHAZADA, FechaRespuesta = s.Ahora, RespondidoPor = respondidoPor,
+                Comentario = string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim(), FechaEnvio = s.VoBos[i].FechaEnvio ?? s.Ahora,
+            };
+            return true;
+        }
+    }
+
+    private bool VoBoActivo(int eventoId, int macroAreaId) =>
+        s.VoBos.Any(v => v.EventoId == eventoId && v.MacroAreaId == macroAreaId && v.Estatus is EstatusVoBo.PENDIENTE or EstatusVoBo.ENVIADA or EstatusVoBo.AUTORIZADA);
+
+    private void CancelarVoBo(int eventoId, int macroAreaId)
+    {
+        for (int i = 0; i < s.VoBos.Count; i++)
+            if (s.VoBos[i] is { Estatus: EstatusVoBo.PENDIENTE or EstatusVoBo.ENVIADA or EstatusVoBo.AUTORIZADA } v && v.EventoId == eventoId && v.MacroAreaId == macroAreaId)
+                s.VoBos[i] = v with { Estatus = EstatusVoBo.CANCELADA, MotivoCancelacion = "Cambió una decisión de la macro área después de la solicitud" };
     }
 
     private string AsegurarMacroArea(string nombre)

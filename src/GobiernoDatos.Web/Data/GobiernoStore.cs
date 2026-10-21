@@ -31,9 +31,12 @@ public sealed class GobiernoStore(TimeProvider reloj)
     public List<RecertAcceso> Accesos { get; } = [];
     public List<RecertDecision> Decisiones { get; } = [];
     public List<RecertBajaEjecucion> BajasEjecutadas { get; } = [];
+    public List<RecertBajaAnulada> BajasAnuladas { get; } = [];
     public List<RecertRecordatorio> Recordatorios { get; } = [];
     // GOBIERNO del extracto → nombre de la macro área (gd.recert_gobierno_macro_area).
     public Dictionary<string, MapeoGobierno> MapeoGobiernos { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Services.GerenteVoBo? GerenteVoBo { get; set; }
+    public List<Services.VoBoGerente> VoBos { get; } = [];
     public List<VistaUso> Usos { get; } = [];
 
     private long _seq;
