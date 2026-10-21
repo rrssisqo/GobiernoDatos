@@ -57,12 +57,22 @@ public sealed class SqlSeguimientoService(SqlConexion db) : ISeguimientoService
             SELECT dp_id, semana_id, comentario FROM gd.log_semanal WHERE semana_id <= @s ORDER BY dp_id, semana_id, log_id;
 
             SELECT COUNT(*) FROM gd.vista_gobernada WHERE activa = 1;
-            """, new { s = semana.Id, gobierno });
+
+            -- Data products con cambio en la semana: avance del DP, avance de una de sus vistas (vigente en esa fecha) o nota de la semana.
+            SELECT dp_id FROM gd.mov_avance_dp WHERE fecha BETWEEN @ini AND @fin
+            UNION
+            SELECT dv.dp_id FROM gd.mov_avance_vista AS mv
+            JOIN gd.dp_vista AS dv ON dv.vista_id = mv.vista_id AND mv.fecha >= dv.fecha_desde AND (dv.fecha_hasta IS NULL OR mv.fecha <= dv.fecha_hasta)
+            WHERE mv.fecha BETWEEN @ini AND @fin
+            UNION
+            SELECT dp_id FROM gd.log_semanal WHERE semana_id = @s;
+            """, new { s = semana.Id, gobierno, ini = P(semana.Inicio), fin = P(semana.Fin) });
 
         var totales = m.Read<TotalRow>().ToList();
         var rubros = m.Read<RubroRow>().ToLookup(r => r.dp_id);
         var notas = m.Read<NotaRow>().ToLookup(n => n.dp_id);
         var inventario = m.ReadSingle<int>();
+        var conCambio = m.Read<int>().ToHashSet();
 
         var filas = totales.Select(t =>
         {
@@ -71,7 +81,7 @@ public sealed class SqlSeguimientoService(SqlConexion db) : ISeguimientoService
                 rubros[t.dp_id].FirstOrDefault(x => x.rubro_id == r.RubroId)?.pct ?? 0)).ToList();
             return new FilaSeguimiento(t.dp_id, t.gobierno, t.data_product, t.estatus, t.pct_avance, t.num_vistas, celdas,
                 nota?.comentario, nota is null || nota.semana_id == semana.Id ? null : Semana.DeId(nota.semana_id).Etiqueta,
-                FilaSeguimiento.Agrupar(notas[t.dp_id].Select(n => (n.semana_id, n.comentario))));
+                FilaSeguimiento.Agrupar(notas[t.dp_id].Select(n => (n.semana_id, n.comentario))), conCambio.Contains(t.dp_id));
         }).OrderBy(f => f.Gobierno).ThenBy(f => f.DataProduct).ToList();
 
         var activos = filas.Where(f => f.Estatus is "EN_CURSO" or "PLANEADO").ToList();

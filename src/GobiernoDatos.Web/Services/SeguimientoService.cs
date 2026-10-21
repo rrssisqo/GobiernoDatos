@@ -10,9 +10,10 @@ public sealed record NotaHistorial(Semana Semana, string Texto);
 
 // Nota = la más reciente hasta la semana consultada (NotaSemana: su etiqueta si es de una semana anterior).
 // Historial = todas las notas hasta esa semana, una por semana, de la más reciente a la más antigua.
+// CambioEnSemana = en la semana consultada hubo avance de un rubro del DP o de una de sus vistas, o una nota de esa semana.
 public sealed record FilaSeguimiento(int DpId, string Gobierno, string DataProduct, string Estatus, decimal Avance,
                                      int Vistas, IReadOnlyList<CeldaRubro> Rubros, string? Nota, string? NotaSemana,
-                                     IReadOnlyList<NotaHistorial> Historial)
+                                     IReadOnlyList<NotaHistorial> Historial, bool CambioEnSemana = false)
 {
     // Varias notas de la misma semana se unen; formato del Excel al exportar: "42/26 - texto. 41/26 - texto".
     public static IReadOnlyList<NotaHistorial> Agrupar(IEnumerable<(int SemanaId, string Texto)> notas) =>
@@ -105,11 +106,15 @@ public sealed class SeguimientoService(GobiernoStore s) : ISeguimientoService
                 var notasDp = s.Notas.Where(n => n.DpId == dp.DpId && n.SemanaId <= semana.Id)
                                      .OrderBy(n => n.SemanaId).ThenBy(n => n.LogId).ToList();
                 var nota = notasDp.LastOrDefault();
+                var vistasDp = s.DpVistas.Where(x => x.DpId == dp.DpId).ToList();
+                var cambio = notasDp.Any(n => n.SemanaId == semana.Id)
+                    || s.MovAvances.Any(a => a.Fecha >= semana.Inicio && a.Fecha <= semana.Fin &&
+                                             (a.DpId == dp.DpId || a.VistaId is int v && vistasDp.Any(x => x.VistaId == v && x.VigenteEn(a.Fecha))));
                 return new FilaSeguimiento(dp.DpId, dp.Gobierno, dp.Nombre, dp.Estatus,
                     Avance.PromedioPonderado(rubros.Select(c => (c.Pct, Catalogos.Rubro(c.RubroId).Peso))),
                     s.NumVistasDp(dp, corte), rubros, nota?.Comentario,
                     nota is null || nota.SemanaId == semana.Id ? null : Semana.DeId(nota.SemanaId).Etiqueta,
-                    FilaSeguimiento.Agrupar(notasDp.Select(n => (n.SemanaId, n.Comentario))));
+                    FilaSeguimiento.Agrupar(notasDp.Select(n => (n.SemanaId, n.Comentario))), cambio);
             }).ToList();
 
             var visibles = gobierno is null ? filas : filas.Where(f => f.Gobierno == gobierno).ToList();

@@ -15,6 +15,7 @@
     </div>
     <form method="get" class="acciones">
         @if (Model.Gob is not null) { <input type="hidden" name="gob" value="@Model.Gob" /> }
+        @if (Model.SoloConCambios) { <input type="hidden" name="cambios" value="1" /> }
         <label class="campo">Semana
             <select name="semana" data-autosubmit>
                 @foreach (var s in Model.Semanas)
@@ -24,7 +25,7 @@
             </select>
         </label>
         <button type="button" class="btn" id="btn-cargar" aria-expanded="false" aria-controls="panel-cargar">Cargar archivo</button>
-        <a class="btn" asp-page-handler="Exportar" asp-route-semana="@t.Semana.Id" asp-route-gob="@Model.Gob">Exportar a Excel</a>
+        <a class="btn" asp-page-handler="Exportar" asp-route-semana="@t.Semana.Id" asp-route-gob="@Model.Gob" asp-route-cambios="@Model.Cambios">Exportar a Excel</a>
         <a class="btn btn-primario" asp-page="/DataProducts/Index">Registrar avance</a>
     </form>
 </header>
@@ -80,12 +81,22 @@
 <section class="panel" aria-label="Avance por data product">
     <div class="panel-cab">
         <div class="chips" aria-label="Filtrar por gobierno">
-            <a class="chip" asp-route-semana="@t.Semana.Id" aria-pressed="@(Model.Gob is null ? "true" : "false")">Todos</a>
+            <a class="chip" asp-route-semana="@t.Semana.Id" asp-route-cambios="@Model.Cambios" aria-pressed="@(Model.Gob is null ? "true" : "false")">Todos</a>
             @foreach (var g in Model.Gobiernos)
             {
-                <a class="chip" asp-route-semana="@t.Semana.Id" asp-route-gob="@g" aria-pressed="@(Model.Gob == g ? "true" : "false")">@g</a>
+                <a class="chip" asp-route-semana="@t.Semana.Id" asp-route-gob="@g" asp-route-cambios="@Model.Cambios" aria-pressed="@(Model.Gob == g ? "true" : "false")">@g</a>
             }
         </div>
+        <form method="get" class="compacto">
+            <input type="hidden" name="semana" value="@t.Semana.Id" />
+            @if (Model.Gob is not null) { <input type="hidden" name="gob" value="@Model.Gob" /> }
+            <label class="campo en-linea compacto">Cambios
+                <select name="cambios" data-autosubmit>
+                    <option value="">Todos</option>
+                    <option value="1" selected="@Model.SoloConCambios">Con cambios en @t.Semana.Etiqueta (@Model.ConCambios)</option>
+                </select>
+            </label>
+        </form>
         <label class="campo en-linea compacto">Buscar
             <input type="search" placeholder="Data product" data-filtro-tabla="#tabla-seguimiento" style="width:220px" />
         </label>
@@ -93,7 +104,7 @@
 
     @if (t.Filas.Count == 0)
     {
-        <div class="vacio">No hay data products para esta semana.</div>
+        <div class="vacio">@(Model.SoloConCambios ? $"Ningún data product tuvo cambios en la semana {t.Semana.Etiqueta}." : "No hay data products para esta semana.")</div>
     }
     else
     {
@@ -138,6 +149,7 @@
                             <td>
                                 <a asp-page="/DataProducts/Detalle" asp-route-id="@f.DpId" asp-route-semana="@t.Semana.Id">@f.DataProduct</a>
                                 @if (f.Estatus == "CERRADO") { <span class="badge">Cerrado</span> }
+                                @if (f.CambioEnSemana) { <span class="badge badge-ok" title="Tuvo avance o comentario en la semana @t.Semana.Etiqueta">Cambió</span> }
                             </td>
                             <td>
                                 <div class="avance">

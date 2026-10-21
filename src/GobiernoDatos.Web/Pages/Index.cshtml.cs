@@ -10,12 +10,17 @@ public class IndexModel(ISeguimientoService seguimiento, IUsuarioActual usuario)
 {
     [BindProperty(SupportsGet = true)] public int? Semana { get; set; }
     [BindProperty(SupportsGet = true)] public string? Gob { get; set; }
+    // "1" = solo los data products con cambio en la semana elegida.
+    [BindProperty(SupportsGet = true)] public string? Cambios { get; set; }
+    public bool SoloConCambios => Cambios == "1";
 
     public IReadOnlyList<Semana> Semanas { get; private set; } = [];
     public TableroSeguimiento Tablero { get; private set; } = null!;
     public IReadOnlyList<string> Gobiernos { get; private set; } = [];
     // Semanas para "Cargar archivo": las 12 más recientes; por omisión la anterior (el Excel se cierra en la sesión semanal).
     public IReadOnlyList<Semana> SemanasCorte { get; private set; } = [];
+    // Cuántos data products (del gobierno filtrado) cambiaron en la semana.
+    public int ConCambios { get; private set; }
     // Para el diálogo "Editar data product".
     public IReadOnlyList<string> CatalogoGobiernos { get; private set; } = [];
     public IReadOnlyList<string> Responsables { get; private set; } = [];
@@ -26,6 +31,8 @@ public class IndexModel(ISeguimientoService seguimiento, IUsuarioActual usuario)
         Semanas = seguimiento.Semanas();
         var semana = Semanas.FirstOrDefault(s => s.Id == Semana, Semanas[0]);
         Tablero = seguimiento.Tablero(semana, Gob);
+        ConCambios = Tablero.Filas.Count(f => f.CambioEnSemana);
+        if (SoloConCambios) Tablero = Tablero with { Filas = Tablero.Filas.Where(f => f.CambioEnSemana).ToList() };
         Gobiernos = seguimiento.Tablero(semana, null).Filas.Select(f => f.Gobierno).Distinct().Order().ToList();
         var actual = seguimiento.SemanaActual();
         SemanasCorte = Enumerable.Range(0, 12).Select(i => Domain.Semana.De(actual.Inicio.AddDays(-7 * i))).ToList();
@@ -56,6 +63,7 @@ public class IndexModel(ISeguimientoService seguimiento, IUsuarioActual usuario)
         var semanas = seguimiento.Semanas();
         var semana = semanas.FirstOrDefault(s => s.Id == Semana, semanas[0]);
         var t = seguimiento.Tablero(semana, Gob);
+        if (SoloConCambios) t = t with { Filas = t.Filas.Where(f => f.CambioEnSemana).ToList() };
         var csv = Csv.Escribir(
             new[] { "Semana", "Gobierno", "Data Product", "Avance", "Vistas" }.Concat(Catalogos.Rubros.Select(r => r.Corto)).Append("Comentarios"),
             t.Filas.Select(f => new object?[] { semana.Etiqueta, f.Gobierno, f.DataProduct, Ui.Pct(f.Avance), f.Vistas }

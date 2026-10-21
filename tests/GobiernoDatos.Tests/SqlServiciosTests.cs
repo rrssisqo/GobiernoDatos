@@ -418,6 +418,9 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.Equal(70, dos.Rubros.Single(c => c.RubroId == 1).Pct);
         Assert.Equal(4, t.Filas.Single(f => f.DataProduct == "DP Uno").Vistas);
         Assert.True(seg.Detalle(dos.DpId, corte)!.UsaValoresIniciales);
+        Assert.True(dos.CambioEnSemana);                                                          // avances y nota de la 40
+        Assert.False(seg.Tablero(new Semana(2026, 41), null).Filas.Single(f => f.DataProduct == "DP Dos").CambioEnSemana);
+        Assert.False(seg.Tablero(new Semana(2026, 41), null).Filas.Single(f => f.DataProduct == "DP Uno").CambioEnSemana);  // la nota 41/26 es futura para el corte 40
 
         var otra = seg.ImportarSeguimiento(lectura.Filas, corte, "prueba");
         Assert.Equal(0, otra.Avances);
