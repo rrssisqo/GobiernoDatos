@@ -291,3 +291,6 @@ section[id] { scroll-margin-top: 16px; }
 .asignacion-fila { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .asignacion-estado { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; }
 .asignacion-fila form { flex: 3 1 420px; }
+
+/* Pestañas entre vistas de una misma sección (Auditoría). */
+.chips.pestanas { margin: 0 0 16px; }

@@ -418,6 +418,24 @@ public class RecordatoriosPortalTests(PortalTests.Fabrica fabrica) : IClassFixtu
         Assert.Contains("Recordatorios enviados", final);
         Assert.Contains(">Enviado<", final);
 
+        // Auditoría → Notificaciones a responsables: la macro área aparece notificada y el correo se descarga como .eml.
+        var auditoria = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria/Notificaciones"));
+        var fila = Regex.Match(auditoria, "<tr data-macro=\"TI\">.*?</tr>", RegexOptions.Singleline).Value;
+        Assert.Contains(">Sí<", fila);
+        var liga = Regex.Match(fila, "href=\"([^\"]*handler=Correo[^\"]*)\"").Groups[1].Value;
+        var eml = await client.GetAsync(liga);
+        Assert.Equal("message/rfc822", eml.Content.Headers.ContentType!.MediaType);
+        var texto = await eml.Content.ReadAsStringAsync();
+        Assert.Contains("To: demo@ejemplo.local", texto);
+        Assert.Contains("Date: ", texto);
+        Assert.DoesNotContain("X-Sender:", texto);
+
+        // Evidencia completa del evento: resumen en Excel y los correos.
+        var zipResp = await client.GetAsync(Regex.Match(auditoria, "href=\"([^\"]*handler=Evidencia[^\"]*)\"").Groups[1].Value);
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await zipResp.Content.ReadAsByteArrayAsync()));
+        Assert.Contains(zip.Entries, e => e.FullName.EndsWith(".xlsx"));
+        Assert.Contains(zip.Entries, e => e.FullName.StartsWith("correos/") && e.FullName.EndsWith(".eml"));
+
         // Correo de prueba al propio administrador.
         html = await client.GetStringAsync("/Recertificacion/Eventos");
         var prueba = WebUtility.HtmlDecode(Regex.Match(Regex.Match(html, "<form[^>]*handler=ProbarCorreo[^>]*>").Value, "action=\"([^\"]*)\"").Groups[1].Value);

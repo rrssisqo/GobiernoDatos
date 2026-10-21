@@ -37,6 +37,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/010_recert_gobierno_macro_area.sql", "db/migrations/011_recert_vobo_gerente.sql",
                                         "db/migrations/012_recert_gerente_unico.sql", "db/migrations/013_recert_anular_ticket.sql",
                                         "db/migrations/014_recert_asignacion_infra.sql", "db/migrations/015_recert_responsable_infra_unico.sql",
+                                        "db/migrations/016_recert_recordatorio_correo.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -261,6 +262,9 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         var bitacora = Assert.Single(recert.Recordatorios(evento.EventoId));
         Assert.True(bitacora.Enviado);
         Assert.Equal(("TI", 4, cert, "admin"), (bitacora.MacroAreas, bitacora.Pendientes, bitacora.UsuarioRed, bitacora.EnviadoPor));
+        Assert.True(bitacora.TieneCorreo);                                                        // evidencia: el correo .eml guardado
+        Assert.Equal(enviado.Asunto, bitacora.Asunto);
+        Assert.Contains("To: cprueba@mabe.com.mx", System.Text.Encoding.UTF8.GetString(recert.CorreoRecordatorio(bitacora.RecordatorioId)!));
 
         var baja = mi.Accesos[0];
         Assert.Throws<DomainException>(() => recert.Decidir(baja.AccesoId, Decision.BAJA, " ", cert));

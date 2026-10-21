@@ -37,6 +37,8 @@ public sealed class RecordatoriosService(IRecertificacionService recert, IDirect
             catch (DomainException ex) { error = ex.Message; }
 
             var enviado = false;
+            byte[]? eml = null;
+            string? asunto = null;
             if (correo is null)
             {
                 error ??= p.UsuarioRed is null ? "Sin usuario de red ni correo registrado" : "Sin correo en Active Directory";
@@ -46,7 +48,9 @@ public sealed class RecordatoriosService(IRecertificacionService recert, IDirect
             {
                 try
                 {
-                    enviador.Enviar(Mensaje(correo, p.Certificador, evento, macros, total));
+                    var mensaje = Mensaje(correo, p.Certificador, evento, macros, total);
+                    asunto = mensaje.Asunto;
+                    eml = enviador.Enviar(mensaje);
                     enviado = true;
                     enviados++;
                 }
@@ -57,7 +61,7 @@ public sealed class RecordatoriosService(IRecertificacionService recert, IDirect
                 }
             }
             recert.RegistrarRecordatorio(new RecertRecordatorio(eventoId, p.Certificador, p.UsuarioRed, correo, macrosTexto, total,
-                                                                enviado, error, enviadoPor, reloj.GetLocalNow().DateTime));
+                                                                enviado, error, enviadoPor, reloj.GetLocalNow().DateTime, Asunto: asunto), eml);
         }
         log.LogInformation("Recordatorios del evento {Evento}: {Enviados} enviados, {SinCorreo} sin correo, {Errores} con error.",
                            evento.Nombre, enviados, sinCorreo.Count, errores.Count);

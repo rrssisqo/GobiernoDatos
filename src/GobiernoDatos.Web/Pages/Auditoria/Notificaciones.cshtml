@@ -1,0 +1,110 @@
+@page
+@model GobiernoDatos.Web.Pages.Auditoria.NotificacionesModel
+@{
+    ViewData["Title"] = "Auditoría · Notificaciones";
+    ViewData["Nav"] = "auditoria";
+    var notificadas = Model.PorMacro.Count(m => m.Notificado);
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Auditoría</h1>
+        <p>Solicitud de validación a los responsables de cada macro área: a quién se notificó y el correo enviado</p>
+    </div>
+    <div class="acciones">
+        @if (Model.Evento is not null)
+        {
+            <a class="btn btn-primario" asp-page-handler="Evidencia" asp-route-evento="@Model.Evento"
+               title="Un .zip con el resumen en Excel y todos los correos enviados (.eml)">Descargar evidencia</a>
+        }
+    </div>
+</header>
+
+<nav class="chips pestanas" aria-label="Vistas de auditoría">
+    <a class="chip" asp-page="Index">Accesos</a>
+    <a class="chip" asp-page="Notificaciones" aria-current="page">Notificaciones a responsables</a>
+</nav>
+
+<section class="panel" aria-labelledby="h-macro">
+    <div class="panel-cab">
+        <h2 id="h-macro">Por macro área</h2>
+        <form method="get" class="compacto">
+            <label class="campo en-linea">Evento
+                <select name="evento" data-autosubmit>
+                    @foreach (var e in Model.Eventos)
+                    {
+                        <option value="@e.EventoId" selected="@(e.EventoId == Model.Evento)">@e.Nombre · @ReglasRecertificacion.Etiqueta(e.Estatus)</option>
+                    }
+                </select>
+            </label>
+        </form>
+    </div>
+    @if (Model.PorMacro.Count == 0)
+    {
+        <div class="vacio">No hay eventos abiertos o cerrados.</div>
+    }
+    else
+    {
+        <div class="panel-cuerpo"><span class="sutil">@notificadas de @Model.PorMacro.Count macro áreas notificadas</span></div>
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-notificacion-macro">
+                <thead><tr><th>Macro área</th><th>Responsables</th><th>Notificado</th><th class="derecha">Envíos</th><th>Último envío</th><th>Correo</th><th class="derecha">Pendientes</th><th>Certificación</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.PorMacro)
+                    {
+                        var u = m.Ultimo;
+                        <tr data-macro="@m.MacroArea">
+                            <td>@m.MacroArea</td>
+                            <td>@(m.Responsables.Count == 0 ? "—" : string.Join(", ", m.Responsables))</td>
+                            <td>@if (m.Notificado) { <span class="badge badge-ok">Sí</span> }
+                                else if (m.Envios.Count > 0) { <span class="badge badge-error" title="@m.Envios[0].Error">No enviado</span> }
+                                else { <span class="badge badge-aviso">No</span> }</td>
+                            <td class="num">@m.Envios.Count(e => e.Enviado)</td>
+                            <td>@if (u is not null) { <span class="mono">@u.Fecha.ToString("yyyy-MM-dd HH:mm")</span><span class="secundario">@u.Certificador · @u.Correo</span> } else { <span class="sutil">—</span> }</td>
+                            <td>@if (u?.TieneCorreo == true) { <a asp-page-handler="Correo" asp-route-id="@u.RecordatorioId">Descargar .eml</a> }
+                                else if (u is not null) { <span class="ayuda">Enviado antes de guardar el correo</span> }</td>
+                            <td class="num">@m.Pendientes</td>
+                            <td>@if (m.Confirmada) { <span class="badge badge-ok">Confirmada</span> } else { <span class="sutil">—</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="panel" aria-labelledby="h-envios">
+    <div class="panel-cab">
+        <h2 id="h-envios">Correos enviados</h2>
+        <span class="sutil">Cada intento de notificación (recordatorios de Eventos), con su resultado</span>
+    </div>
+    @if (Model.Envios.Count == 0)
+    {
+        <div class="vacio">No se han enviado notificaciones en este evento.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-envios">
+                <thead><tr><th>Fecha</th><th>Responsable</th><th>Correo</th><th>Macro áreas</th><th>Asunto</th><th class="derecha">Pendientes</th><th>Resultado</th><th>Envió</th><th>Evidencia</th></tr></thead>
+                <tbody>
+                    @foreach (var e in Model.Envios)
+                    {
+                        <tr>
+                            <td class="mono">@e.Fecha.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@e.Certificador<span class="secundario">@e.UsuarioRed</span></td>
+                            <td class="mono">@Ui.Texto(e.Correo, "—")</td>
+                            <td>@e.MacroAreas</td>
+                            <td>@Ui.Texto(e.Asunto, "—")</td>
+                            <td class="num">@e.Pendientes</td>
+                            <td>@if (e.Enviado) { <span class="badge badge-ok">Enviado</span> } else { <span class="badge badge-error">No enviado</span><span class="ayuda" style="display:block">@e.Error</span> }</td>
+                            <td class="mono">@e.EnviadoPor</td>
+                            <td>@if (e.TieneCorreo) { <a asp-page-handler="Correo" asp-route-id="@e.RecordatorioId">Descargar .eml</a> } else { <span class="sutil">—</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <div class="panel-pie"><span>El .eml es el correo tal como salió del portal (remitente, destinatario, fecha, asunto y cuerpo); se abre con Outlook.</span></div>
+</section>

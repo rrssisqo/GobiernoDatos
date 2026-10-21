@@ -234,9 +234,10 @@ public sealed class RecertDecision
 // Renglón del catálogo GOBIERNO (HANA) → macro área.
 public sealed record MapeoGobierno(string Gobierno, string MacroArea, string Usuario, DateTime Fecha);
 
-// Recordatorio por correo a un certificador (gd.recert_recordatorio, migración 009).
+// Recordatorio por correo a un certificador (gd.recert_recordatorio, migración 009). Asunto y TieneCorreo (.eml guardado): migración 016.
 public sealed record RecertRecordatorio(int EventoId, string Certificador, string? UsuarioRed, string? Correo, string MacroAreas,
-                                        int Pendientes, bool Enviado, string? Error, string EnviadoPor, DateTime Fecha);
+                                        int Pendientes, bool Enviado, string? Error, string EnviadoPor, DateTime Fecha,
+                                        long RecordatorioId = 0, string? Asunto = null, bool TieneCorreo = false);
 
 // Ticket de baja anulado (gd.recert_baja_ejecucion_anulada, migración 013).
 public sealed record RecertBajaAnulada(long AccesoId, string Ticket, DateOnly FechaEjecucion, string EjecutadoPor, string Motivo,

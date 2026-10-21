@@ -474,27 +474,37 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             .Select(p => new CertificadorPendiente(p.certificador, p.usuario_red, p.correo, p.macro_area, p.tipo, p.pendientes)).ToList();
     }
 
-    public void RegistrarRecordatorio(RecertRecordatorio r)
+    public void RegistrarRecordatorio(RecertRecordatorio r, byte[]? eml = null)
     {
         using var c = db.Abrir();
         c.Execute("""
-            INSERT INTO gd.recert_recordatorio (evento_id, certificador, usuario_red, correo, macro_areas, pendientes, enviado, error, enviado_por, fecha)
-            VALUES (@EventoId, @Certificador, @UsuarioRed, @Correo, @MacroAreas, @Pendientes, @Enviado, LEFT(@Error, 400), @EnviadoPor, @Fecha)
-            """, r);
+            INSERT INTO gd.recert_recordatorio (evento_id, certificador, usuario_red, correo, macro_areas, pendientes, enviado, error, enviado_por, fecha,
+                                                asunto, correo_eml)
+            VALUES (@EventoId, @Certificador, @UsuarioRed, @Correo, @MacroAreas, @Pendientes, @Enviado, LEFT(@Error, 400), @EnviadoPor, @Fecha,
+                    LEFT(@Asunto, 300), @eml)
+            """, new { r.EventoId, r.Certificador, r.UsuarioRed, r.Correo, r.MacroAreas, r.Pendientes, r.Enviado, r.Error, r.EnviadoPor, r.Fecha, r.Asunto, eml });
+    }
+
+    public byte[]? CorreoRecordatorio(long recordatorioId)
+    {
+        using var c = db.Abrir();
+        return c.ExecuteScalar<byte[]?>("SELECT correo_eml FROM gd.recert_recordatorio WHERE recordatorio_id = @recordatorioId", new { recordatorioId });
     }
 
     private sealed record RecordatorioRow(int evento_id, string certificador, string? usuario_red, string? correo, string macro_areas,
-                                          int pendientes, bool enviado, string? error, string enviado_por, DateTime fecha);
+                                          int pendientes, bool enviado, string? error, string enviado_por, DateTime fecha,
+                                          long recordatorio_id, string? asunto, bool tiene_correo);
 
     public IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId)
     {
         using var c = db.Abrir();
         return c.Query<RecordatorioRow>("""
-            SELECT evento_id, certificador, usuario_red, correo, macro_areas, pendientes, enviado, error, enviado_por, fecha
+            SELECT evento_id, certificador, usuario_red, correo, macro_areas, pendientes, enviado, error, enviado_por, fecha,
+                   recordatorio_id, asunto, CAST(CASE WHEN correo_eml IS NULL THEN 0 ELSE 1 END AS BIT) AS tiene_correo
             FROM gd.recert_recordatorio WHERE evento_id = @eventoId ORDER BY fecha DESC, recordatorio_id DESC
             """, new { eventoId })
             .Select(r => new RecertRecordatorio(r.evento_id, r.certificador, r.usuario_red, r.correo, r.macro_areas, r.pendientes,
-                                                r.enviado, r.error, r.enviado_por, r.fecha)).ToList();
+                                                r.enviado, r.error, r.enviado_por, r.fecha, r.recordatorio_id, r.asunto, r.tiene_correo)).ToList();
     }
 
     // ---- Catálogo GOBIERNO → macro área (migración 010) ----

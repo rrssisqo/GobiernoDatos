@@ -95,7 +95,9 @@ public interface IRecertificacionService
     // Todos los accesos de un evento (o de todos los eventos si es nulo), ordenados por evento, macro área, vista y usuario.
     IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId);
     IReadOnlyList<CertificadorPendiente> PendientesPorCertificador(int eventoId);
-    void RegistrarRecordatorio(RecertRecordatorio recordatorio);
+    // eml = el correo tal como salió (evidencia); nulo si no se envió.
+    void RegistrarRecordatorio(RecertRecordatorio recordatorio, byte[]? eml = null);
+    byte[]? CorreoRecordatorio(long recordatorioId);
     IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId);
     // Catálogo GOBIERNO (extracto HANA) → macro área. La macro área se crea si no existe. Aplica a los extractos que se carguen después.
     IReadOnlyList<MapeoGobierno> MapeosGobierno();
@@ -453,9 +455,19 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
         }
     }
 
-    public void RegistrarRecordatorio(RecertRecordatorio recordatorio)
+    public void RegistrarRecordatorio(RecertRecordatorio recordatorio, byte[]? eml = null)
     {
-        lock (s.Sync) s.Recordatorios.Add(recordatorio);
+        lock (s.Sync)
+        {
+            var id = s.NuevoId();
+            s.Recordatorios.Add(recordatorio with { RecordatorioId = id, TieneCorreo = eml is not null });
+            if (eml is not null) s.CorreosRecordatorio[id] = eml;
+        }
+    }
+
+    public byte[]? CorreoRecordatorio(long recordatorioId)
+    {
+        lock (s.Sync) return s.CorreosRecordatorio.GetValueOrDefault(recordatorioId);
     }
 
     public IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId)
