@@ -1,0 +1,130 @@
+@page
+@model GobiernoDatos.Web.Pages.Reglas.EditarModel
+@{
+    ViewData["Title"] = Model.EsAlta ? "Nueva regla" : $"Regla {Model.Regla.Codigo}";
+    ViewData["Nav"] = "reglas";
+    var f = Model.Regla;
+    var cat = Model.Catalogos;
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>@(Model.EsAlta ? "Nueva regla de calidad" : $"Regla {f.Codigo}")</h1>
+        <p>@(Model.EsAlta ? "Alta en el catálogo de reglas" : "Cambio de la definición de la regla; el código no se modifica") @if (!Model.Activa) { <span class="badge badge-error">Dada de baja</span> }</p>
+    </div>
+    <div class="acciones">
+        <a class="btn" asp-page="Index">Volver a reglas</a>
+    </div>
+</header>
+
+<section class="panel" aria-label="Definición de la regla">
+    <form method="post" asp-route-id="@Model.Id" class="panel-cuerpo" id="form-regla"
+          data-confirmar="@(Model.EsAlta ? "¿Dar de alta la regla?" : "¿Guardar los cambios de la regla?")">
+        @if (Model.Error is not null) { <div class="aviso aviso-error" role="alert">@Model.Error</div> }
+
+        <fieldset>
+            <legend>Identificación</legend>
+            <div class="form-fila">
+                <label class="campo" style="flex:0 1 160px">Código *
+                    @if (Model.EsAlta)
+                    {
+                        <input type="text" name="Regla.Codigo" value="@f.Codigo" required maxlength="20" pattern="[A-Za-z0-9_]+" placeholder="RL_4_1" class="mono" autofocus />
+                    }
+                    else
+                    {
+                        <input type="text" value="@f.Codigo" class="mono" readonly aria-readonly="true" title="El código no se modifica: identifica los resultados que llegan de Informatica" />
+                    }
+                </label>
+                <label class="campo">Tipo de regla
+                    <input type="text" name="Regla.TipoRegla" value="@f.TipoRegla" maxlength="80" list="lista-tipos" placeholder="Nulos" />
+                </label>
+                <label class="campo">Dimensión de calidad
+                    <select name="Regla.DimensionDq">
+                        <option value="">—</option>
+                        @foreach (var d in DefinicionRegla.Dimensiones) { <option value="@d" selected="@(f.DimensionDq == d)">@DefinicionRegla.Etiqueta(d)</option> }
+                    </select>
+                </label>
+                <label class="campo">Etapa
+                    <select name="Regla.EtapaOrden">
+                        @foreach (var e in DefinicionRegla.Etapas.Where(e => e.Nombre != "Baja" || !Model.Activa))
+                        {
+                            <option value="@e.Orden" selected="@(f.EtapaOrden == e.Orden)">@e.Nombre</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <label class="campo">Descripción *
+                <input type="text" name="Regla.Descripcion" value="@f.Descripcion" required maxlength="300" placeholder="Gestión de Materiales" />
+            </label>
+            <div class="form-fila">
+                <label class="campo" style="flex:1 1 300px">Regla funcional
+                    <textarea name="Regla.ReglaFuncional" rows="3" maxlength="2000" placeholder="Qué valida la regla y qué registros se consideran error">@f.ReglaFuncional</textarea>
+                </label>
+                <label class="campo" style="flex:1 1 300px">Propósito de negocio
+                    <textarea name="Regla.PropositoNegocio" rows="3" maxlength="2000">@f.PropositoNegocio</textarea>
+                </label>
+            </div>
+            <div class="form-fila">
+                <label class="campo">Gobierno
+                    <select name="Regla.Gobierno">
+                        <option value="">—</option>
+                        @* El gobierno actual siempre es opción (aunque ya no esté activo), para no perderlo al guardar. *@
+                        @foreach (var g in cat.Gobiernos.Append(f.Gobierno).OfType<string>().Distinct()) { <option value="@g" selected="@(f.Gobierno == g)">@g</option> }
+                    </select>
+                </label>
+                <label class="campo">Responsable
+                    <input type="text" name="Regla.Responsable" value="@f.Responsable" maxlength="150" list="lista-responsables-regla" />
+                </label>
+                <label class="campo">Frecuencia
+                    <select name="Regla.Frecuencia">
+                        <option value="">—</option>
+                        @foreach (var fr in DefinicionRegla.Frecuencias) { <option value="@fr" selected="@(f.Frecuencia == fr)">@DefinicionRegla.Etiqueta(fr)</option> }
+                    </select>
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Origen e Informatica</legend>
+            <div class="form-fila">
+                <label class="campo" style="flex:2 1 240px">Objetos BW
+                    <input type="text" name="Regla.Objetos" value="@f.Objetos" maxlength="1000" list="lista-objetos" placeholder="PMATERIAL; ZMM_O09" class="mono" />
+                </label>
+                <label class="campo" style="flex:2 1 240px">Campos evaluados
+                    <input type="text" name="Regla.CamposEvaluados" value="@f.CamposEvaluados" maxlength="400" placeholder="MATL_TYPE; MATL_GROUP" class="mono" />
+                </label>
+            </div>
+            <div class="form-fila">
+                <label class="campo">Tabla STG <input type="text" name="Regla.TablaStg" value="@f.TablaStg" maxlength="128" placeholder="STG_0MATERIAL" class="mono" /></label>
+                <label class="campo">Mapping <input type="text" name="Regla.Mapping" value="@f.Mapping" maxlength="128" placeholder="m_DQ_PMATERIAL" class="mono" /></label>
+                <label class="campo" style="flex:0 1 110px">No. CSV <input type="number" name="Regla.NoCsv" value="@f.NoCsv" min="1" /></label>
+                <label class="campo">Nombre del CSV <input type="text" name="Regla.NombreCsv" value="@f.NombreCsv" maxlength="260" placeholder="07PMATERIAL_RL_4_1.csv" class="mono" /></label>
+            </div>
+            <label class="campo">Query de validación
+                <textarea name="Regla.QueryValidacion" rows="5" class="mono" placeholder="SELECT … FROM … WHERE …">@f.QueryValidacion</textarea>
+            </label>
+            <label class="opciones"><span><input type="checkbox" name="Regla.EscribeLog" value="true" checked="@f.EscribeLog" /> Escribe log en stage</span></label>
+            <input type="hidden" name="Regla.EscribeLog" value="false" />
+        </fieldset>
+
+        <fieldset>
+            <legend>Notificación</legend>
+            <div class="form-fila">
+                <label class="campo">Asunto del correo <input type="text" name="Regla.CorreoAsunto" value="@f.CorreoAsunto" maxlength="200" placeholder="Dato Maestro de Material" /></label>
+                <label class="campo" style="flex:2 1 300px">Destinatarios
+                    <input type="text" name="Regla.Destinatarios" value="@f.Destinatarios" maxlength="2000" placeholder="nombre.apellido@mabe.com.mx; otro@mabe.com.mx" />
+                </label>
+            </div>
+        </fieldset>
+
+        <datalist id="lista-tipos">@foreach (var x in cat.Tipos) { <option value="@x"></option> }</datalist>
+        <datalist id="lista-responsables-regla">@foreach (var x in cat.Responsables) { <option value="@x"></option> }</datalist>
+        <datalist id="lista-objetos">@foreach (var x in cat.Objetos) { <option value="@x"></option> }</datalist>
+        <p class="ayuda">* Obligatorio. Objetos BW y destinatarios se separan con punto y coma; los objetos y tipos de regla que no existan se dan de alta.
+           @if (!Model.EsAlta) { <text>Los cambios al query de validación quedan en su historial.</text> }</p>
+        <div class="form-fila" style="justify-content:flex-start">
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">@(Model.EsAlta ? "Dar de alta" : "Guardar cambios")</button>
+            <a class="btn" asp-page="Index" style="flex:0 0 auto">Cancelar</a>
+        </div>
+    </form>
+</section>

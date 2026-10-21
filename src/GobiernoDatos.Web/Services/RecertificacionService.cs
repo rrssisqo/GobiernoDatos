@@ -71,6 +71,11 @@ public interface IRecertificacionService
     IReadOnlyList<CertificadorPendiente> PendientesPorCertificador(int eventoId);
     void RegistrarRecordatorio(RecertRecordatorio recordatorio);
     IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId);
+    // Catálogo GOBIERNO (extracto HANA) → macro área. La macro área se crea si no existe. Aplica a los extractos que se carguen después.
+    IReadOnlyList<MapeoGobierno> MapeosGobierno();
+    void CrearMapeoGobierno(string gobierno, string macroArea, string usuario);
+    void CambiarMapeoGobierno(string gobierno, string macroArea, string usuario);
+    void EliminarMapeoGobierno(string gobierno);
     IReadOnlyList<CertificadoresMacroArea> Certificadores();
     // El certificador se identifica por su usuario de red (DOMINIO\usuario); el nombre sale del directorio.
     void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo);
@@ -382,6 +387,44 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
     public IReadOnlyList<RecertRecordatorio> Recordatorios(int eventoId)
     {
         lock (s.Sync) return s.Recordatorios.Where(r => r.EventoId == eventoId).OrderByDescending(r => r.Fecha).ToList();
+    }
+
+    public IReadOnlyList<MapeoGobierno> MapeosGobierno()
+    {
+        lock (s.Sync) return s.MapeoGobiernos.Values.OrderBy(m => m.Gobierno, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public void CrearMapeoGobierno(string gobierno, string macroArea, string usuario)
+    {
+        var (g, m) = ReglasRecertificacion.MapeoGobierno(gobierno, macroArea);
+        lock (s.Sync)
+        {
+            if (s.MapeoGobiernos.ContainsKey(g)) throw new DomainException($"El gobierno {g} ya tiene macro área; cámbiala en su renglón.");
+            s.MapeoGobiernos[g] = new MapeoGobierno(g, AsegurarMacroArea(m), usuario, s.Ahora);
+        }
+    }
+
+    public void CambiarMapeoGobierno(string gobierno, string macroArea, string usuario)
+    {
+        var (g, m) = ReglasRecertificacion.MapeoGobierno(gobierno, macroArea);
+        lock (s.Sync)
+        {
+            if (!s.MapeoGobiernos.TryGetValue(g, out var actual)) throw new DomainException($"El gobierno {g} no está en el catálogo.");
+            s.MapeoGobiernos[g] = new MapeoGobierno(actual.Gobierno, AsegurarMacroArea(m), usuario, s.Ahora);
+        }
+    }
+
+    public void EliminarMapeoGobierno(string gobierno)
+    {
+        lock (s.Sync)
+            if (!s.MapeoGobiernos.Remove(gobierno.Trim())) throw new DomainException($"El gobierno {gobierno} no está en el catálogo.");
+    }
+
+    private string AsegurarMacroArea(string nombre)
+    {
+        var m = s.MacroAreas.FirstOrDefault(x => x.Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase));
+        if (m is null) s.MacroAreas.Add(m = new MacroArea { MacroAreaId = (int)s.NuevoId(), Nombre = nombre });
+        return m.Nombre;
     }
 
     public IReadOnlyList<CertificadoresMacroArea> Certificadores()

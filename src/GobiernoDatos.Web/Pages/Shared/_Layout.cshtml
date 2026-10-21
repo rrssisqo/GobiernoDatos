@@ -32,11 +32,13 @@
         <a asp-page="/DataProducts/Index" aria-current="@Activo("dp")">Data products</a>
         <a asp-page="/Vistas/Index" aria-current="@Activo("vistas")">Vistas gobernadas</a>
         <a asp-page="/Calidad/Index" aria-current="@Activo("calidad")">Calidad</a>
+        <a asp-page="/Reglas/Index" aria-current="@Activo("reglas")">Reglas</a>
         <a asp-page="/Tareas/Index" aria-current="@Activo("tareas")">Seguimiento tarea</a>
         <div class="seccion">Recertificación de accesos</div>
         @if (Usuario.TieneRol(RolesPortal.Administrador))
         {
             <a asp-page="/Recertificacion/Eventos" aria-current="@Activo("eventos")">Eventos</a>
+            <a asp-page="/Recertificacion/MacroAreas" aria-current="@Activo("macroareas")">Macro áreas</a>
         }
         @if (Usuario.TieneRol(RolesPortal.Certificador))
         {

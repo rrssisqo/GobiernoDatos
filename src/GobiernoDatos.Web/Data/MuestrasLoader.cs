@@ -20,12 +20,19 @@ public static partial class MuestrasLoader
         CargarVistasSharePoint(s, Leer(ruta, "sharepoint_vistas_hana_gobernadas.csv"), fecha);
         CargarReglas(s, Leer(ruta, "sharepoint_reglas.csv"));
 
+        foreach (var f in Leer(ruta, "recert_gobierno_macro_area.csv"))
+        {
+            if (!s.MacroAreas.Any(m => m.Nombre.Equals(f["MACRO_AREA"], StringComparison.OrdinalIgnoreCase)))
+                s.MacroAreas.Add(new MacroArea { MacroAreaId = (int)s.NuevoId(), Nombre = f["MACRO_AREA"] });
+            s.MapeoGobiernos[f["GOBIERNO"]] = new MapeoGobierno(f["GOBIERNO"], f["MACRO_AREA"], "migración", s.Ahora);
+        }
+
         var evento = new RecertEvento { EventoId = (int)s.NuevoId(), Nombre = "[Evento muestra]" };
         s.Eventos.Add(evento);
         CargaExtracto.Cargar(s, evento, Leer(ruta, "recertificacion_extracto_muestra.csv"));
         if (evento.Rechazos.Count == 0) evento.Estatus = EstatusEvento.ABIERTO;
 
-        // El extracto de muestra no trae "Responsable": el usuario demo certifica las macro áreas configuradas.
+        // Los certificadores no vienen del extracto: el usuario demo certifica las macro áreas configuradas.
         foreach (var nombre in demo.MacroAreas)
             s.MacroAreas.FirstOrDefault(m => m.Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase))?.Certificadores
              .Add(new CertificadorMacro(UsuarioRed.Normalizar(demo.Login, dominio), demo.Nombre, "TITULAR"));

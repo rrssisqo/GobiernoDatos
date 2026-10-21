@@ -31,6 +31,7 @@ if (fuente.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<ISeguimientoService, SqlSeguimientoService>();
     builder.Services.AddSingleton<IVistasService, SqlVistasService>();
     builder.Services.AddSingleton<ICalidadService, SqlCalidadService>();
+    builder.Services.AddSingleton<IReglasService, SqlReglasService>();
     builder.Services.AddSingleton<IRecertificacionService, SqlRecertificacionService>();
     builder.Services.AddSingleton<ITareasService, SqlTareasService>();
     builder.Services.AddSingleton<IFuenteExtracto, ExtractoHana>();
@@ -45,6 +46,7 @@ else if (fuente.Equals("Muestras", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<ISeguimientoService, SeguimientoService>();
     builder.Services.AddSingleton<IVistasService, VistasService>();
     builder.Services.AddSingleton<ICalidadService, CalidadService>();
+    builder.Services.AddSingleton<IReglasService, ReglasService>();
     builder.Services.AddSingleton<IRecertificacionService, RecertificacionService>();
     builder.Services.AddSingleton<ITareasService, TareasService>();
     builder.Services.AddSingleton<IFuenteExtracto, ExtractoMuestras>();
@@ -82,6 +84,14 @@ if (!string.IsNullOrWhiteSpace(servidorCorreo) || builder.Environment.IsProducti
 else
     builder.Services.AddSingleton<IEnviadorCorreo, EnviadorSimulado>();
 builder.Services.AddSingleton<RecordatoriosService>();
+
+// Búsqueda de usuarios para asignar certificadores: Entra ID si está configurado o en producción; en desarrollo, simulada.
+builder.Services.AddHttpClient("graph", c => c.Timeout = TimeSpan.FromSeconds(20));
+var tenantEntra = builder.Configuration[$"{GobiernoDatosOptions.Seccion}:Entra:TenantId"];
+if (!string.IsNullOrWhiteSpace(tenantEntra) || builder.Environment.IsProduction())
+    builder.Services.AddSingleton<IBuscadorUsuarios, BuscadorEntra>();
+else
+    builder.Services.AddSingleton<IBuscadorUsuarios, BuscadorSimulado>();
 
 builder.Services.AddSingleton<ResolutorUsuarios>();
 builder.Services.AddRazorPages();

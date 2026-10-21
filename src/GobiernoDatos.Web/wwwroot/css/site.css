@@ -265,3 +265,16 @@ dialog.dialogo h2 { margin: 0; font-size: 18px; }
 .paginacion { display: flex; align-items: center; gap: 10px; }
 .paginacion a[aria-disabled=true] { pointer-events: none; opacity: .45; }
 .tabla-auditoria td { white-space: nowrap; }
+
+/* Eventos → Certificadores: buscador de usuarios (Entra ID). */
+.buscador-usuario { display: flex; flex-direction: column; gap: 2px; }
+.buscador-usuario .seleccionado:empty { display: none; }
+.sugerencias-usuario { position: fixed; z-index: 50; max-width: min(520px, calc(100vw - 32px)); max-height: 320px; overflow-y: auto; margin: 0; padding: 4px;
+                       list-style: none; background: #fff; border: 1px solid var(--control); border-radius: 6px; box-shadow: 0 6px 20px rgba(23, 33, 43, .15); }
+.sugerencias-usuario li { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.sugerencias-usuario li span { color: var(--sutil); font-size: 12px; }
+.sugerencias-usuario li[aria-selected=true], .sugerencias-usuario li[role=option]:hover { background: var(--fondo); }
+.sugerencias-usuario li.mensaje { cursor: default; color: var(--sutil); }
+
+/* Secciones a las que se salta con un enlace (#certificadores, #recordatorios). */
+section[id] { scroll-margin-top: 16px; }

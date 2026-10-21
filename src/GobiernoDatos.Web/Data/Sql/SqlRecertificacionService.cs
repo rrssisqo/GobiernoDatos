@@ -123,7 +123,7 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
         foreach (var f in extracto)
             t.Rows.Add(f.GetValueOrDefault("AREA"), f.GetValueOrDefault("CONTENT"), f.GetValueOrDefault("USUARIO"), f.GetValueOrDefault("NOMBRE"),
                        f.GetValueOrDefault("ROL"), f.GetValueOrDefault("VISTA"), f.GetValueOrDefault("ACCESO ULTIMOS 3 MESES"),
-                       f.GetValueOrDefault("Área Responsable") ?? f.GetValueOrDefault("Area Responsable"), f.GetValueOrDefault("Responsable"),
+                       f.GetValueOrDefault("Área Responsable") ?? f.GetValueOrDefault("Area Responsable"), null,   // RESPONSABLE ya no se usa (010)
                        f.GetValueOrDefault("GOBIERNO"));
         return t;
     }
@@ -420,6 +420,56 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
             .Select(r => new RecertRecordatorio(r.evento_id, r.certificador, r.usuario_red, r.correo, r.macro_areas, r.pendientes,
                                                 r.enviado, r.error, r.enviado_por, r.fecha)).ToList();
     }
+
+    // ---- Catálogo GOBIERNO → macro área (migración 010) ----
+
+    private sealed record MapeoRow(string gobierno, string macro_area, string usuario, DateTime fecha_registro);
+
+    public IReadOnlyList<MapeoGobierno> MapeosGobierno()
+    {
+        using var c = db.Abrir();
+        return c.Query<MapeoRow>("""
+            SELECT gm.gobierno, m.nombre AS macro_area, gm.usuario, gm.fecha_registro
+            FROM gd.recert_gobierno_macro_area AS gm JOIN gd.macro_area AS m ON m.macro_area_id = gm.macro_area_id
+            ORDER BY gm.gobierno
+            """).Select(r => new MapeoGobierno(r.gobierno, r.macro_area, r.usuario, r.fecha_registro)).ToList();
+    }
+
+    public void CrearMapeoGobierno(string gobierno, string macroArea, string usuario)
+    {
+        var (g, m) = ReglasRecertificacion.MapeoGobierno(gobierno, macroArea);
+        db.EnTransaccion((c, tx) =>
+        {
+            if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM gd.recert_gobierno_macro_area WITH (UPDLOCK, HOLDLOCK) WHERE gobierno = @g", new { g }, tx) > 0)
+                throw new DomainException($"El gobierno {g} ya tiene macro área; cámbiala en su renglón.");
+            c.Execute("INSERT INTO gd.recert_gobierno_macro_area (gobierno, macro_area_id, usuario) VALUES (@g, @id, @usuario)",
+                      new { g, id = MacroAreaId(c, tx, m), usuario }, tx);
+        });
+    }
+
+    public void CambiarMapeoGobierno(string gobierno, string macroArea, string usuario)
+    {
+        var (g, m) = ReglasRecertificacion.MapeoGobierno(gobierno, macroArea);
+        db.EnTransaccion((c, tx) =>
+        {
+            var n = c.Execute("""
+                UPDATE gd.recert_gobierno_macro_area SET macro_area_id = @id, usuario = @usuario, fecha_registro = SYSDATETIME() WHERE gobierno = @g
+                """, new { g, id = MacroAreaId(c, tx, m), usuario }, tx);
+            if (n == 0) throw new DomainException($"El gobierno {g} no está en el catálogo.");
+        });
+    }
+
+    public void EliminarMapeoGobierno(string gobierno)
+    {
+        using var c = db.Abrir();
+        if (c.Execute("DELETE FROM gd.recert_gobierno_macro_area WHERE gobierno = @g", new { g = gobierno.Trim() }) == 0)
+            throw new DomainException($"El gobierno {gobierno} no está en el catálogo.");
+    }
+
+    // La macro área se busca por nombre y se da de alta si no existe.
+    private static int MacroAreaId(IDbConnection c, IDbTransaction tx, string nombre) =>
+        c.ExecuteScalar<int?>("SELECT macro_area_id FROM gd.macro_area WHERE nombre = @nombre", new { nombre }, tx)
+        ?? c.ExecuteScalar<int>("INSERT INTO gd.macro_area (nombre) OUTPUT inserted.macro_area_id VALUES (@nombre)", new { nombre }, tx);
 
     // ---- Certificadores ----
 

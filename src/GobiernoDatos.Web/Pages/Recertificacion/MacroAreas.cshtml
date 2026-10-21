@@ -1,0 +1,79 @@
+@page
+@model GobiernoDatos.Web.Pages.Recertificacion.MacroAreasModel
+@{
+    ViewData["Title"] = "Macro áreas";
+    ViewData["Nav"] = "macroareas";
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Macro áreas</h1>
+        <p>A qué macro área va cada GOBIERNO del extracto de HANA al cargar un evento de recertificación</p>
+    </div>
+    <div class="acciones">
+        <a class="btn" asp-page="Eventos" asp-fragment="certificadores">Certificadores</a>
+    </div>
+</header>
+
+<section class="panel" aria-labelledby="h-nuevo">
+    <form method="post" asp-page-handler="Crear" class="panel-cuerpo" id="form-mapeo">
+        <h2 id="h-nuevo">Agregar gobierno</h2>
+        <div class="form-fila">
+            <label class="campo">GOBIERNO (como llega de HANA)
+                <input type="text" name="gobierno" required maxlength="100" placeholder="CSC" class="mono" />
+            </label>
+            <label class="campo">Macro área
+                <input type="text" name="macroArea" required maxlength="100" list="lista-macro-areas" placeholder="Finanzas" />
+            </label>
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">Agregar</button>
+        </div>
+        <p class="ayuda">Si la macro área no existe se da de alta; después asígnale su certificador en Eventos → Certificadores.
+           Los cambios aplican a los extractos que se carguen después; un evento ya cargado conserva sus macro áreas.</p>
+    </form>
+</section>
+
+<section class="panel" aria-labelledby="h-catalogo">
+    <div class="panel-cab">
+        <h2 id="h-catalogo">Catálogo</h2>
+        <span class="sutil">Un GOBIERNO del extracto que no esté aquí se rechaza al cargar, con el motivo «no tiene macro área asignada».</span>
+    </div>
+    @if (Model.Mapeos.Count == 0)
+    {
+        <div class="vacio">El catálogo está vacío: todos los renglones del extracto se rechazarían.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-mapeo">
+                <thead><tr><th>GOBIERNO</th><th>Macro área</th><th>Actualizó</th><th><span class="oculto-visual">Eliminar</span></th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.Mapeos)
+                    {
+                        <tr data-texto="@m.Gobierno @m.MacroArea">
+                            <td class="mono">@m.Gobierno</td>
+                            <td>
+                                <form method="post" asp-page-handler="Cambiar" class="form-fila compacto" style="min-width:320px"
+                                      data-confirmar="¿Cambiar la macro área de @m.Gobierno?">
+                                    <input type="hidden" name="gobierno" value="@m.Gobierno" />
+                                    <input type="text" name="macroArea" value="@m.MacroArea" required maxlength="100" list="lista-macro-areas"
+                                           aria-label="Macro área de @m.Gobierno" style="flex:2 1 180px" />
+                                    <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Guardar</button>
+                                </form>
+                            </td>
+                            <td class="sutil">@m.Usuario · @m.Fecha.ToString("yyyy-MM-dd")</td>
+                            <td>
+                                <form method="post" asp-page-handler="Eliminar" class="inline"
+                                      data-confirmar="¿Eliminar @m.Gobierno del catálogo? Sus renglones se rechazarán en el siguiente extracto.">
+                                    <input type="hidden" name="gobierno" value="@m.Gobierno" />
+                                    <button type="submit" class="btn btn-chico btn-peligro">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<datalist id="lista-macro-areas">@foreach (var m in Model.MacroAreas) { <option value="@m"></option> }</datalist>

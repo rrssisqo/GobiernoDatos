@@ -34,6 +34,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/002_portal.sql", "db/migrations/003_responsable_usuario_red.sql",
                                         "db/migrations/004_tarea_vista.sql", "db/migrations/005_avance_vista_captura_libre.sql", "db/migrations/006_calidad_marca_de_carga.sql", "db/migrations/007_avance_reportado_dp.sql",
                                         "db/migrations/008_auditoria_columnas_hana.sql", "db/migrations/009_recert_recordatorio.sql",
+                                        "db/migrations/010_recert_gobierno_macro_area.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -282,14 +283,21 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.Equal(EstatusEvento.CERRADO, recert.Historial().Single(h => h.EventoId == evento.EventoId).Estatus);
 
         // Un extracto con un rol en dos vistas queda en borrador con rechazos y no abre; se descarta.
-        Dictionary<string, string> F(string u, string rol, string vista) => new()
+        // La macro área sale del catálogo GOBIERNO → macro área; un gobierno sin catálogo (ni Área Responsable) se rechaza,
+        // y el RESPONSABLE del extracto ya no crea certificadores.
+        Dictionary<string, string> F(string u, string rol, string vista, string? gobierno = null) => new()
         {
-            ["USUARIO"] = u, ["NOMBRE"] = u, ["ROL"] = rol, ["VISTA"] = vista, ["ACCESO ULTIMOS 3 MESES"] = "10", ["Área Responsable"] = "TI",
+            ["USUARIO"] = u, ["NOMBRE"] = u, ["ROL"] = rol, ["VISTA"] = vista, ["ACCESO ULTIMOS 3 MESES"] = "10",
+            ["GOBIERNO"] = gobierno ?? "", ["Área Responsable"] = gobierno is null ? "TI" : "", ["Responsable"] = "Persona del extracto",
         };
-        var id = recert.CrearEvento("Prueba rechazos", null, null, [F("U1", "ROL_X", "MABE.A/V1"), F("U2", "ROL_X", "MABE.A/V2")]);
+        var id = recert.CrearEvento("Prueba rechazos", null, null,
+            [F("U1", "ROL_X", "MABE.A/V1"), F("U2", "ROL_X", "MABE.A/V2"), F("U3", "CON_GEN_CALENDARIO_FISCAL_GOVERNANCE", "MABE.AGENERICO.GENERICO/CONTINENTAL_GENERICO_CALENDARIOFISCAL", "CSC"), F("U4", "ROL_Z", "MABE.A/V4", "NO_EXISTE")]);
         var t = recert.Tablero(id)!;
         Assert.Equal(1, t.Evento.Validacion.RolesConVariasVistas);
-        Assert.Equal(2, t.Evento.Rechazos.Count);
+        Assert.Equal(3, t.Evento.Rechazos.Count);
+        Assert.Contains(t.Evento.Rechazos, r => r.Usuario == "U4" && r.Motivo == "El gobierno «NO_EXISTE» no tiene macro área asignada");
+        Assert.Equal("Finanzas", Assert.Single(t.MacroAreas).MacroArea);                          // CSC → Finanzas (catálogo); rol y vista ya existentes
+        Assert.DoesNotContain(recert.Certificadores().SelectMany(m => m.Certificadores), x => x.Nombre == "Persona del extracto");
         Assert.Throws<DomainException>(() => recert.AbrirEvento(id));
         recert.DescartarBorrador(id);
         Assert.DoesNotContain(recert.Historial(), h => h.EventoId == id);
@@ -381,6 +389,67 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.All(recert.Auditoria(evento), f => Assert.Equal(evento, f.EventoId));
         Assert.All(todas, f => Assert.False(string.IsNullOrEmpty(f.AreaResponsable)));
         Assert.Contains(todas, f => f.Area is not null && f.Content is not null);
+    }
+
+    [SkippableFact]
+    public void Catalogo_gobierno_macro_area_sobre_la_base()
+    {
+        var recert = new SqlRecertificacionService(Db(), new DirectorioDePrueba(), Options.Create(new GobiernoDatosOptions()));
+        var mapeos = recert.MapeosGobierno();
+        Assert.Equal(15, mapeos.Count);                                                          // precarga de la vista HANA
+        Assert.Equal("Datos Maestros Material", mapeos.Single(m => m.Gobierno == "DM_Mat").MacroArea);
+
+        recert.CrearMapeoGobierno(" NUEVO_GOB ", "Macro Nueva", "prueba");                       // crea la macro área
+        Assert.Throws<DomainException>(() => recert.CrearMapeoGobierno("NUEVO_GOB", "TI", "prueba"));
+        Assert.Contains(recert.Certificadores(), m => m.MacroArea == "Macro Nueva");
+        recert.CambiarMapeoGobierno("NUEVO_GOB", "TI", "prueba");
+        Assert.Equal(("TI", "prueba"), recert.MapeosGobierno().Where(m => m.Gobierno == "NUEVO_GOB").Select(m => (m.MacroArea, m.Usuario)).Single());
+        recert.EliminarMapeoGobierno("NUEVO_GOB");
+        Assert.DoesNotContain(recert.MapeosGobierno(), m => m.Gobierno == "NUEVO_GOB");
+        Assert.Throws<DomainException>(() => recert.EliminarMapeoGobierno("NUEVO_GOB"));
+        Assert.Throws<DomainException>(() => recert.CambiarMapeoGobierno("CSC", " ", "prueba"));
+    }
+
+    [SkippableFact]
+    public void Abc_de_reglas_sobre_la_base()
+    {
+        var db = Db();
+        var reglas = new SqlReglasService(db);
+        DatosRegla Datos(string codigo, string descripcion, int etapa, string[] objetos) => new(codigo, "Duplicados", descripcion, "Funcional", null,
+            "UNICIDAD", "Datos Maestros", "Responsable de regla", "MATL_TYPE", objetos, "STG_X", "m_DQ_X", 99, "99X.csv", "MENSUAL", false,
+            "Asunto", ["datos@mabe.com.mx"], etapa, "SELECT 1");
+        var id = reglas.Crear(Datos("rl_9_9", "Regla de prueba", 2, ["PMATERIAL", "ZNUEVO_O99"]), "prueba");
+        Assert.Throws<DomainException>(() => reglas.Crear(Datos("RL_9_9", "Otra", 1, []), "prueba"));      // código repetido
+
+        var r = reglas.Obtener(id)!;
+        Assert.True(r.Activa);
+        Assert.Equal(("RL_9_9", "Duplicados", "Datos Maestros", "MENSUAL", false, 2), (r.Datos.Codigo, r.Datos.TipoRegla, r.Datos.Gobierno, r.Datos.Frecuencia, r.Datos.EscribeLog, r.Datos.EtapaOrden));
+        Assert.Equal(["PMATERIAL", "ZNUEVO_O99"], r.Datos.Objetos);
+        Assert.Equal(["datos@mabe.com.mx"], r.Datos.Destinatarios);
+        Assert.Contains(new SqlCalidadService(db).Tablero(202610, null).PorRegla, f => f.Codigo == "RL_9_9" && f.Medicion is null);
+        Assert.Contains("Duplicados", reglas.Catalogos().Tipos);
+
+        // Cambio: el código no cambia; objetos y destinatarios se reemplazan; la etapa nueva queda en el historial.
+        reglas.Actualizar(id, Datos("OTRO", "Regla corregida", 6, ["PMATERIAL"]) with { Destinatarios = [], QueryValidacion = "SELECT 2" }, "prueba");
+        r = reglas.Obtener(id)!;
+        Assert.Equal(("RL_9_9", "Regla corregida", 6), (r.Datos.Codigo, r.Datos.Descripcion, r.Datos.EtapaOrden));
+        Assert.Equal(["PMATERIAL"], r.Datos.Objetos);
+        Assert.Empty(r.Datos.Destinatarios);
+        using var c = db.Abrir();
+        Assert.Equal(2, c.ExecuteScalar<int>("SELECT COUNT(*) FROM gd.regla_query_hist WHERE regla_id = @id", new { id }));   // trigger del query
+        Assert.Throws<DomainException>(() => reglas.Actualizar(id, Datos("RL_9_9", "x", 8, []), "prueba"));                  // la baja va por su botón
+
+        // Baja lógica con motivo y reactivación a la etapa anterior.
+        Assert.Throws<DomainException>(() => reglas.DarDeBaja(id, " ", "prueba"));
+        reglas.DarDeBaja(id, "Se reemplaza", "prueba");
+        Assert.Contains(reglas.Listar(), f => f.ReglaId == id && !f.Activa && f.Etapa == "Baja");
+        Assert.Throws<DomainException>(() => reglas.Actualizar(id, Datos("RL_9_9", "x", 6, []), "prueba"));                  // reactivar primero
+        reglas.Reactivar(id, "prueba");
+        Assert.Contains(reglas.Listar(), f => f.ReglaId == id && f.Activa && f.Etapa == "Operación PRD");
+        Assert.Equal("Se reemplaza", c.ExecuteScalar<string>("""
+            SELECT m.comentario FROM gd.mov_etapa_regla m JOIN gd.etapa_regla e ON e.etapa_regla_id = m.etapa_regla_id
+            WHERE m.regla_id = @id AND e.orden = 8
+            """, new { id }));
     }
 
     [SkippableFact]

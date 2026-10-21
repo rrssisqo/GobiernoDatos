@@ -20,6 +20,18 @@ public sealed class GobiernoDatosOptions
     public UsuarioDemoOptions UsuarioDemo { get; set; } = new();
 
     public CorreoOptions Correo { get; set; } = new();
+
+    public EntraOptions Entra { get; set; } = new();
+}
+
+// Búsqueda de usuarios en Entra ID (Microsoft Graph) para asignar certificadores. Token con usuario y contraseña de la
+// cuenta de servicio (ROPC) sobre la aplicación registrada. La contraseña: variable GobiernoDatos__Entra__Contrasena.
+public sealed class EntraOptions
+{
+    public string? TenantId { get; set; }
+    public string? ClientId { get; set; }
+    public string? Usuario { get; set; }
+    public string? Contrasena { get; set; }
 }
 
 // Recordatorios por correo (relay SMTP interno). La contraseña no va en appsettings: user-secrets en local y

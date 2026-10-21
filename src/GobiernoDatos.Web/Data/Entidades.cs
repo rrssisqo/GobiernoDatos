@@ -115,19 +115,27 @@ public sealed class Regla
 {
     public int ReglaId { get; init; }
     public required string Codigo { get; init; }
-    public string? TipoRegla { get; init; }
-    public required string Descripcion { get; init; }
-    public string? ReglaFuncional { get; init; }
-    public string? Gobierno { get; init; }
-    public string? Responsable { get; init; }
-    public string? CamposEvaluados { get; init; }
-    public string? DimensionDq { get; init; }
-    public int? NoCsv { get; init; }
-    public string? NombreCsv { get; init; }
-    public bool EscribeLog { get; init; }
-    public string? Etapa { get; init; }
-    public bool Activa { get; init; } = true;
+    public string? TipoRegla { get; set; }
+    public required string Descripcion { get; set; }
+    public string? ReglaFuncional { get; set; }
+    public string? Gobierno { get; set; }
+    public string? Responsable { get; set; }
+    public string? CamposEvaluados { get; set; }
+    public string? DimensionDq { get; set; }
+    public int? NoCsv { get; set; }
+    public string? NombreCsv { get; set; }
+    public bool EscribeLog { get; set; }
+    public string? Etapa { get; set; }
+    public bool Activa { get; set; } = true;
     public List<int> Objetos { get; } = [];
+    public string? PropositoNegocio { get; set; }
+    public string? TablaStg { get; set; }
+    public string? Mapping { get; set; }
+    public string? Frecuencia { get; set; }
+    public string? CorreoAsunto { get; set; }
+    public string? QueryValidacion { get; set; }
+    public List<string> Destinatarios { get; } = [];
+    public DateOnly? FechaAlta { get; set; }
 }
 
 public sealed class ResumenCalidad
@@ -222,6 +230,9 @@ public sealed class RecertDecision
     public required string DecididoPor { get; init; }
     public DateTime FechaRegistro { get; init; }
 }
+
+// Renglón del catálogo GOBIERNO (HANA) → macro área.
+public sealed record MapeoGobierno(string Gobierno, string MacroArea, string Usuario, DateTime Fecha);
 
 // Recordatorio por correo a un certificador (gd.recert_recordatorio, migración 009).
 public sealed record RecertRecordatorio(int EventoId, string Certificador, string? UsuarioRed, string? Correo, string MacroAreas,

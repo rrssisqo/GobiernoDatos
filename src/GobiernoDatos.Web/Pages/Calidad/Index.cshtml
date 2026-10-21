@@ -24,6 +24,7 @@
                 @foreach (var g in Model.Gobiernos) { <option selected="@(Model.Gob == g)">@g</option> }
             </select>
         </label>
+        <a class="btn" asp-page="/Reglas/Index">Reglas</a>
         <a class="btn btn-primario" href="#cargar">Cargar resumen</a>
     </form>
 </header>
@@ -75,8 +76,8 @@
     </section>
 </div>
 
-<section class="panel" aria-labelledby="h-reglas">
-    <div class="panel-cab"><h2 id="h-reglas">Por regla y fuente</h2></div>
+<section class="panel" aria-labelledby="h-reglas" id="reglas">
+    <div class="panel-cab"><h2 id="h-reglas">Por regla y fuente</h2><a asp-page="/Reglas/Index">Administrar reglas</a></div>
     <div class="tabla-scroll">
         <table class="tabla">
             <thead><tr><th>Regla</th><th class="col-nombre">Descripción</th><th>Objetos BW · vistas</th><th class="derecha">Evaluados</th><th class="derecha">Errores</th><th class="derecha">Calidad</th></tr></thead>

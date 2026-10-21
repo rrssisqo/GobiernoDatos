@@ -110,8 +110,10 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 | `/DataProducts/Detalle` | Detalle de DP | Rubros DP, avance por vista con etapa, bitácora unificada, registrar avance (DP o vista), nota semanal, cerrar DP |
 | `/Vistas` | Vistas gobernadas | Pestañas Todas / Nuevas / Fuera de recertificación, uso por vista, datos del extracto (lectura) y de gobierno (editables), mover de etapa con motivo en regresos, objetos BW |
 | `/Tareas` | Seguimiento tarea | Tareas de la etapa de cada vista asignadas a un usuario de red: data product, vista, usuario, etapa, asignación, estatus, días transcurridos (se congelan al cerrar) y check para marcarla terminada |
-| `/Calidad` | Calidad | Periodo y gobierno, KPIs, por gobierno, por regla y vista fuente, carga del resumen con rechazos |
+| `/Calidad` | Calidad | Periodo y gobierno, KPIs, por gobierno, por regla y vista fuente, carga del resumen con rechazos; enlace al catálogo de reglas |
+| `/Reglas` | Reglas | ABC del catálogo de reglas: listado (activas, dadas de baja, todas; búsqueda), alta y cambio en `/Reglas/Editar` (el código no cambia), baja lógica con motivo (inactiva + etapa "Baja"; conserva su historial de resultados) y reactivación a la etapa anterior. Objetos BW y tipos nuevos se crean; destinatarios en `gd.regla_contacto`; cambios de etapa en `gd.mov_etapa_regla`. Validación en `Domain/DefinicionRegla.cs` |
 | `/Recertificacion/Eventos` | Eventos | Carga del extracto → validación → abrir → cerrar, avance por macro área, historial |
+| `/Recertificacion/MacroAreas` | Macro áreas | Solo administradores. ABC del catálogo GOBIERNO (extracto HANA) → macro área (`gd.recert_gobierno_macro_area`, migración 010); antes era una tabla fija dentro de la vista HANA. La carga del extracto toma la macro área de aquí (la columna Área Responsable solo si el gobierno no está); un gobierno sin macro área se rechaza. El RESPONSABLE del extracto ya no se usa: los certificadores se administran en Eventos |
 | `/Recertificacion/Mi` | Mi recertificación | Accesos de las macro áreas del certificador, Continúa/Baja al momento, comentario obligatorio en Baja, acción masiva, confirmación |
 | `/Recertificacion/Bajas` | Bajas y evidencia | Registrar ejecución con ticket, traza de auditoría, exportar evidencia CSV |
 | `/Auditoria` | Auditoría | Solo administradores. Accesos de recertificación (un evento o todos) con las columnas de la consulta HANA en su orden, sin GOBIERNO, RESPONSABLE ni COMENTARIOS (AREA, CONTENT, ROL, VISTA, USUARIO, NAME, AREARESPONSABLE, OKBAJA vacía, ACCESOS); filtros por área responsable y texto; paginado de 100; exportar a Excel (.xlsx, respeta los filtros) y exportar por macro área (.zip con un .xlsx por macro área, `Data/EscritorExcel.cs`). La migración 008 guarda además GOBIERNO y RESPONSABLE por acceso |
@@ -175,6 +177,13 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 - "Enviar correo de prueba" (Eventos) manda un correo al administrador que lo pulsa, para validar el relay.
 - Configuración (`GobiernoDatos:Correo` en `appsettings.Production.json`): relay `relay.mabenet.corpmabe.com:25`, cuenta `mabenet\sacmexalt`, remitente `administrador.analytics@mabe.com.mx`. La contraseña **no** está en el repositorio: variable `GobiernoDatos__Correo__Contrasena` en el `web.config` del servidor (user-secrets en local). Sin `Correo:Servidor` fuera de producción el envío es simulado (`EnviadorSimulado`).
 
+## Búsqueda de certificadores en Entra ID
+
+- Eventos → Certificadores → "Asignar": al escribir nombre, correo o usuario de red, el portal busca en Entra ID (Microsoft Graph, `Services/BuscadorUsuarios.cs`) y muestra nombre, usuario de red, correo, puesto y área. Al elegir, el campo queda con `MABENET\usuario` y se asigna como siempre (se valida contra el AD local).
+- Solo aparecen cuentas activas con cuenta de Windows (`onPremisesSamAccountName`); el dominio NetBIOS sale de `onPremisesDomainName` (`mabenet.corpmabe.com` → `MABENET`). Las cuentas solo de nube o externas no pueden entrar al portal con autenticación de Windows.
+- Token por usuario y contraseña de la cuenta de servicio (ROPC) sobre la aplicación registrada: `GobiernoDatos:Entra` (TenantId, ClientId, Usuario) en `appsettings.Production.json`; la contraseña en la variable `GobiernoDatos__Entra__Contrasena` del `web.config`. Si la cuenta llega a requerir MFA, ROPC deja de funcionar: habría que cambiar a un secreto de aplicación con permiso `User.Read.All` de aplicación.
+- Requiere salida del servidor a `login.microsoftonline.com` y `graph.microsoft.com`. Si la búsqueda falla, se puede escribir el usuario de red a mano.
+
 ## Decisiones que tomé y conviene confirmar
 
 1. **Rubros de vista de DP sin vistas asignadas** (resuelta con la migración 007: avance reportado). El Excel trae Glosario, Linaje, Perfil y Reglas a nivel DP, pero no dice qué vistas tiene cada DP. Los migré como valor inicial del DP y se usan solo mientras el DP no tenga vistas asignadas; al asignar la primera, el cálculo pasa a ser el promedio de sus vistas. Alternativa: asignar las vistas reales antes de migrar.
@@ -187,4 +196,4 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 ## Pendiente
 
 - Autenticación corporativa (Windows / Entra ID): sustituir `UsuarioDemo` por una implementación que lea `HttpContext.User` y mapee el usuario a `responsable`. Los roles del portal son Equipo, Administrador y Certificador.
-- Pantallas que la maqueta no cubre: catálogo de reglas (alta y edición). Los certificadores por macro área ya se administran en Eventos.
+- Los certificadores por macro área se administran en Eventos y el catálogo de reglas en el menú Reglas.

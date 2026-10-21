@@ -5,12 +5,13 @@ namespace GobiernoDatos.Web.Data;
 
 // Carga del extracto de la vista HANA de Recertificación a un evento (espejo de sp_cargar_extracto_recertificacion, v3):
 // staging → validación → usuarios/roles/vistas → recert_acceso + vista_uso, y sincronización del inventario de vistas.
-// "Área Responsable" = macro área; "Responsable" = certificador. AREA, CONTENT, GOBIERNO y Responsable se guardan
-// además en cada acceso tal como llegaron (Auditoría, migración 008).
+// Macro área = catálogo GOBIERNO → macro área (migración 010); "Área Responsable" solo si el gobierno no está en el catálogo.
+// El "Responsable" del extracto ya no se usa: los certificadores se administran en el portal.
+// AREA, CONTENT y GOBIERNO se guardan además en cada acceso tal como llegaron (Auditoría, migración 008).
 public static class CargaExtracto
 {
     private sealed record Fila(int Num, string Usuario, string Nombre, string Rol, string Vista,
-                               int Accesos, string MacroArea, string? Responsable, string? Area, string? Content, string? Gobierno);
+                               int Accesos, string MacroArea, string? Area, string? Content, string? Gobierno);
 
     public static void Cargar(GobiernoStore s, RecertEvento evento, IReadOnlyList<Dictionary<string, string>> filas)
     {
@@ -24,12 +25,14 @@ public static class CargaExtracto
             string usuario = f.GetValueOrDefault("USUARIO", "").ToUpperInvariant();
             string rol = f.GetValueOrDefault("ROL", "");
             string vista = f.GetValueOrDefault("VISTA", "");
-            string macro = f.GetValueOrDefault("Área Responsable", f.GetValueOrDefault("Area Responsable", ""));
+            var gobierno = f.GetValueOrDefault("GOBIERNO", "").Trim();
+            string macro = s.MapeoGobiernos.TryGetValue(gobierno, out var mapeo) ? mapeo.MacroArea
+                         : f.GetValueOrDefault("Área Responsable", f.GetValueOrDefault("Area Responsable", "")).Trim();
             string accesosTxt = f.GetValueOrDefault("ACCESO ULTIMOS 3 MESES", "0");
 
             string? motivo = null;
             if (usuario == "" || rol == "" || vista == "") motivo = "Usuario, rol o vista vacíos";
-            else if (macro == "") motivo = "Sin Área Responsable (macro área)";
+            else if (macro == "") motivo = $"El gobierno «{(gobierno == "" ? "(vacío)" : gobierno)}» no tiene macro área asignada";
             else if (!int.TryParse(accesosTxt.Replace(",", ""), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
                 motivo = "Accesos de 3 meses no numérico";
 
@@ -37,7 +40,7 @@ public static class CargaExtracto
 
             validas.Add(new(i + 2, usuario, f.GetValueOrDefault("NOMBRE", usuario), rol.ToUpperInvariant(),
                 RutaTecnica.Normalizar(vista), int.Parse(accesosTxt.Replace(",", ""), CultureInfo.InvariantCulture),
-                macro, NullSiVacio(f.GetValueOrDefault("Responsable")), NullSiVacio(f.GetValueOrDefault("AREA")),
+                macro, NullSiVacio(f.GetValueOrDefault("AREA")),
                 NullSiVacio(f.GetValueOrDefault("CONTENT")), NullSiVacio(f.GetValueOrDefault("GOBIERNO"))));
         }
 
@@ -104,17 +107,12 @@ public static class CargaExtracto
                 macro = new MacroArea { MacroAreaId = (int)s.NuevoId(), Nombre = f.MacroArea };
                 s.MacroAreas.Add(macro);
             }
-            if (f.Responsable is not null && macro.Certificadores.Count == 0)
-            {
-                macro.Certificadores.Add(new CertificadorMacro(null, f.Responsable, "TITULAR"));
-                s.AsegurarResponsable(f.Responsable);
-            }
 
             s.Accesos.Add(new RecertAcceso
             {
                 AccesoId = s.NuevoId(), EventoId = evento.EventoId, UsuarioCodigo = f.Usuario, Rol = f.Rol,
                 VistaId = vista.VistaId, MacroAreaId = macro.MacroAreaId, Accesos3m = f.Accesos,
-                Area = f.Area, Content = f.Content, Gobierno = f.Gobierno, Responsable = f.Responsable,
+                Area = f.Area, Content = f.Content, Gobierno = f.Gobierno,
             });
         }
 

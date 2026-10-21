@@ -6,7 +6,8 @@ namespace GobiernoDatos.Web.Services;
 
 // Origen del extracto de recertificación para el botón "Actualizar" de Eventos.
 // Devuelve filas con las columnas del extracto que entiende la carga (las mismas del CSV):
-//   AREA, CONTENT, USUARIO, NOMBRE, ROL, VISTA, ACCESO ULTIMOS 3 MESES, GOBIERNO, Área Responsable, Responsable.
+//   AREA, CONTENT, USUARIO, NOMBRE, ROL, VISTA, ACCESO ULTIMOS 3 MESES, GOBIERNO.
+// La macro área sale del catálogo GOBIERNO → macro área del portal (migración 010), ya no de la vista.
 public interface IFuenteExtracto
 {
     string Descripcion { get; }
@@ -21,11 +22,9 @@ public sealed class ExtractoHana(IConfiguration configuracion, ILogger<ExtractoH
     // OKBAJA y COMENTARIOS llegan vacíos: la decisión y el comentario se capturan en el portal.
     internal const string Consulta = """
         SELECT
-            "AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "AREARESPONSABLE", "RESPONSABLE",
-            "OKBAJA", "COMENTARIOS", sum("ACCESOS") AS "ACCESOS"
+            "AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "OKBAJA", "COMENTARIOS", sum("ACCESOS") AS "ACCESOS"
         FROM "_SYS_BIC"."MABE.TI.ANALYTICS/CONT_TI_RECERTIFICACION"
-        GROUP BY "AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "AREARESPONSABLE", "RESPONSABLE",
-                 "OKBAJA", "COMENTARIOS"
+        GROUP BY "AREA", "CONTENT", "ROL", "VISTA", "USUARIO", "NAME", "GOBIERNO", "OKBAJA", "COMENTARIOS"
         """;
 
     private string? Cadena => configuracion.GetConnectionString("Hana");
@@ -55,7 +54,6 @@ public sealed class ExtractoHana(IConfiguration configuracion, ILogger<ExtractoH
                     ["AREA"] = Texto("AREA"), ["CONTENT"] = Texto("CONTENT"), ["USUARIO"] = Texto("USUARIO"), ["NOMBRE"] = Texto("NAME"),
                     ["ROL"] = Texto("ROL"), ["VISTA"] = Texto("VISTA"), ["GOBIERNO"] = Texto("GOBIERNO"),
                     ["ACCESO ULTIMOS 3 MESES"] = accesos == "" ? "0" : accesos,   // sin accesos en el periodo = 0
-                    ["Área Responsable"] = Texto("AREARESPONSABLE"), ["Responsable"] = Texto("RESPONSABLE"),
                 });
             }
             return filas;

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace GobiernoDatos.Web.Pages.Recertificacion;
 
 public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente, TimeProvider reloj, IUsuarioActual usuario,
-                          RecordatoriosService recordatorios) : PortalPageModel
+                          RecordatoriosService recordatorios, IBuscadorUsuarios buscador) : PortalPageModel
 {
     [BindProperty(SupportsGet = true)] public int? Evento { get; set; }
 
@@ -92,6 +92,14 @@ public class EventosModel(IRecertificacionService recert, IFuenteExtracto fuente
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
         return Ejecutar(() => MensajeOk = $"Correo de prueba enviado a {recordatorios.EnviarPrueba(usuario.Login)}.",
                         "", () => RedirectToPage(null, null, new { Evento }, "recordatorios"));
+    }
+
+    // Autocompletado de "Asignar": usuarios de Entra ID con usuario de red.
+    public IActionResult OnGetBuscarUsuarios(string? q)
+    {
+        if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
+        try { return new JsonResult(new { usuarios = buscador.Buscar(q ?? "") }); }
+        catch (DomainException ex) { return new JsonResult(new { error = ex.Message }); }
     }
 
     public IActionResult OnPostAsignar(int macroAreaId, string? usuarioRed, string tipo) =>

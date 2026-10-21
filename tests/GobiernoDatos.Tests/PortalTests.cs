@@ -196,6 +196,145 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
     }
 
     [Fact]
+    public async Task Asignar_certificador_busca_usuarios_por_nombre()
+    {
+        var client = fabrica.CreateClient();
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Recertificacion/Eventos"));
+        var url = Regex.Match(html, "data-buscar-usuario=\"([^\"]+)\"").Groups[1].Value;
+        Assert.Contains("handler=BuscarUsuarios", url);
+        Assert.Contains("<a class=\"btn\" href=\"#certificadores\">Certificadores</a>", html);   // botón que lleva a la sección
+        Assert.Contains("id=\"certificadores\"", html);
+
+        var json = await client.GetStringAsync(url + "&q=medrano");
+        Assert.Contains(@"""usuarioRed"":""MABENET\\jmmmexcl""", json);     // JSON escapa la diagonal invertida
+        Assert.Contains("\"nombre\":\"Medrano, Juan (MEX, PAL, CL)\"", json);
+        Assert.Contains("\"usuarios\":[]", await client.GetStringAsync(url + "&q=x"));
+    }
+
+    [Fact]
+    public async Task Reglas_alta_cambio_baja_y_reactivacion()
+    {
+        var client = fabrica.CreateClient();
+        var lista = await client.GetStringAsync("/Reglas");
+        Assert.Contains("href=\"/Reglas/Editar\"", lista);                     // botón Nueva regla
+        var html = await client.GetStringAsync("/Reglas/Editar");
+        var accion = Atributo(html, "form-regla", "action");
+        var gobierno = WebUtility.HtmlDecode(Regex.Matches(Regex.Match(html, "<select name=\"Regla.Gobierno\">.*?</select>", RegexOptions.Singleline).Value,
+                                                           "<option value=\"([^\"]+)\"").First().Groups[1].Value);
+        Dictionary<string, string> Datos(string codigo, string descripcion, string etapa = "2") => new()
+        {
+            ["Regla.Codigo"] = codigo, ["Regla.Descripcion"] = descripcion, ["Regla.TipoRegla"] = "Duplicados",
+            ["Regla.DimensionDq"] = "UNICIDAD", ["Regla.Gobierno"] = gobierno, ["Regla.Objetos"] = "pmaterial; znuevo_o01",
+            ["Regla.Destinatarios"] = "datos@mabe.com.mx", ["Regla.EtapaOrden"] = etapa, ["Regla.EscribeLog"] = "false",
+            ["__RequestVerificationToken"] = Token(html),
+        };
+
+        // Alta
+        var r = await client.PostAsync(accion, new FormUrlEncodedContent(Datos("rl_9_1", "Validación de prueba")));
+        var final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.True(final.Contains("Regla RL_9_1 dada de alta."), Regex.Match(final, "aviso-error[^>]*>([^<]*)<").Groups[1].Value);
+        var fila = Regex.Match(final, @"<tr data-texto=""RL_9_1 .*?</tr>", RegexOptions.Singleline).Value;
+        Assert.Contains("Validación de prueba", fila);
+        Assert.Contains("PMATERIAL, ZNUEVO_O01", fila);                       // objeto nuevo dado de alta
+        Assert.Contains("Desarrollo", fila);
+        var editar = WebUtility.HtmlDecode(Regex.Match(fila, "href=\"(/Reglas/Editar\\?id=\\d+)\"").Groups[1].Value);
+        var id = Regex.Match(editar, @"id=(\d+)").Groups[1].Value;
+
+        // Repetida: el error se muestra en el formulario, con lo capturado.
+        r = await client.PostAsync(accion, new FormUrlEncodedContent(Datos("RL_9_1", "Otra descripción")));
+        final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.Contains("Ya existe una regla con el código RL_9_1.", final);
+        Assert.Contains("value=\"Otra descripción\"", final);
+
+        // Cambio: el formulario trae los datos guardados; el código no se modifica aunque venga otro.
+        html = WebUtility.HtmlDecode(await client.GetStringAsync(editar));
+        Assert.Contains("value=\"PMATERIAL; ZNUEVO_O01\"", html);
+        Assert.Contains("value=\"datos@mabe.com.mx\"", html);
+        Assert.Contains("readonly", Regex.Match(html, "<input type=\"text\" value=\"RL_9_1\"[^>]*>").Value);
+        r = await client.PostAsync(Atributo(html, "form-regla", "action"), new FormUrlEncodedContent(Datos("XX_CAMBIO", "Descripción corregida", "6")));
+        final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.Contains("Regla RL_9_1 actualizada.", final);
+        fila = Regex.Match(final, @"<tr data-texto=""RL_9_1 .*?</tr>", RegexOptions.Singleline).Value;
+        Assert.Contains("Descripción corregida", fila);
+        Assert.Contains("Operación PRD", fila);
+        Assert.DoesNotContain("XX_CAMBIO", final);
+
+        // Baja con motivo: sale de las activas y aparece en "Dadas de baja"; luego se reactiva.
+        var listaHtml = await client.GetStringAsync("/Reglas");
+        var baja = Atributo(listaHtml, "form-baja", "action");
+        r = await client.PostAsync(baja, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["reglaId"] = id, ["codigo"] = "RL_9_1", ["motivo"] = "Se reemplaza por otra regla", ["__RequestVerificationToken"] = Token(listaHtml),
+        }));
+        final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.Contains("Regla RL_9_1 dada de baja.", final);
+        Assert.DoesNotContain("<tr data-texto=\"RL_9_1 ", final);
+        var bajas = WebUtility.HtmlDecode(await client.GetStringAsync("/Reglas?estado=BAJAS"));
+        fila = Regex.Match(bajas, @"<tr data-texto=""RL_9_1 .*?</tr>", RegexOptions.Singleline).Value;
+        Assert.Contains(">Baja<", fila);
+        var reactivar = WebUtility.HtmlDecode(Regex.Match(Regex.Match(fila, "<form[^>]*handler=Reactivar[^>]*>").Value, "action=\"([^\"]*)\"").Groups[1].Value);
+        r = await client.PostAsync(reactivar, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["reglaId"] = id, ["codigo"] = "RL_9_1", ["__RequestVerificationToken"] = Token(bajas),
+        }));
+        Assert.Contains("Regla RL_9_1 reactivada.", WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync()));
+
+        // Una regla existente cuyo gobierno no está en el catálogo lo conserva al editarla y guardarla.
+        var listaActual = WebUtility.HtmlDecode(await client.GetStringAsync("/Reglas"));
+        var filaRl11 = Regex.Match(listaActual, @"<tr data-texto=""RL_1_1 .*?</tr>", RegexOptions.Singleline).Value;
+        var gobiernoRl11 = Regex.Matches(filaRl11, "<td>([^<]*)</td>")[1].Groups[1].Value;
+        var editarRl11 = Regex.Match(filaRl11, @"href=""(/Reglas/Editar\?id=\d+)""").Groups[1].Value;
+        var formRl11 = WebUtility.HtmlDecode(await client.GetStringAsync(editarRl11));
+        Assert.Matches($"<option value=\"{Regex.Escape(gobiernoRl11)}\" selected=\"selected\">", formRl11);
+        // Reenvía los campos de texto tal como vienen en el formulario.
+        var campos = Regex.Matches(formRl11, @"<input[^>]*name=""(Regla\.[^""]+)""[^>]*>").Select(m => m)
+            .Where(m => m.Groups[1].Value != "Regla.EscribeLog")
+            .ToDictionary(m => m.Groups[1].Value, m => Regex.Match(m.Value, @"value=""([^""]*)""").Groups[1].Value);
+        campos["Regla.Gobierno"] = gobiernoRl11;
+        campos["Regla.EtapaOrden"] = "5";
+        campos["Regla.EscribeLog"] = "true";
+        campos["__RequestVerificationToken"] = Token(formRl11);
+        r = await client.PostAsync(Atributo(formRl11, "form-regla", "action"), new FormUrlEncodedContent(campos));
+        final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.True(final.Contains("Regla RL_1_1 actualizada."), Regex.Match(final, "aviso-error[^>]*>([^<]*)<").Groups[1].Value);
+        Assert.Contains($"<td>{gobiernoRl11}</td>", Regex.Match(final, @"<tr data-texto=""RL_1_1 .*?</tr>", RegexOptions.Singleline).Value);
+
+        // Calidad ya no tiene el formulario; enlaza al catálogo.
+        var calidad = await client.GetStringAsync("/Calidad");
+        Assert.DoesNotContain("form-regla", calidad);
+        Assert.Contains("href=\"/Reglas\"", calidad);
+    }
+
+    [Fact]
+    public async Task Catalogo_de_macro_areas_alta_cambio_y_eliminacion()
+    {
+        var client = fabrica.CreateClient();
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Recertificacion/MacroAreas"));
+        Assert.Contains("<td class=\"mono\">DM_Mat</td>", html);                                  // precarga
+        var crear = Atributo(html, "form-mapeo", "action");
+        async Task<string> Post(string accion, Dictionary<string, string> campos)
+        {
+            campos["__RequestVerificationToken"] = Token(html);
+            var r = await client.PostAsync(accion, new FormUrlEncodedContent(campos));
+            return WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        }
+
+        var final = await Post(crear, new() { ["gobierno"] = "PRUEBA_GOB", ["macroArea"] = "Macro de prueba" });
+        Assert.Contains("PRUEBA_GOB → Macro de prueba agregado.", final);
+        Assert.Contains("Ya existe", (await Post(crear, new() { ["gobierno"] = "PRUEBA_GOB", ["macroArea"] = "TI" })).Replace("ya tiene macro área", "Ya existe"));
+
+        var fila = Regex.Match(final, @"<tr data-texto=""PRUEBA_GOB .*?</tr>", RegexOptions.Singleline).Value;
+        var cambiar = WebUtility.HtmlDecode(Regex.Match(Regex.Match(fila, "<form[^>]*handler=Cambiar[^>]*>").Value, "action=\"([^\"]*)\"").Groups[1].Value);
+        final = await Post(cambiar, new() { ["gobierno"] = "PRUEBA_GOB", ["macroArea"] = "TI" });
+        Assert.Contains("PRUEBA_GOB ahora va a TI.", final);
+
+        var eliminar = WebUtility.HtmlDecode(Regex.Match(Regex.Match(fila, "<form[^>]*handler=Eliminar[^>]*>").Value, "action=\"([^\"]*)\"").Groups[1].Value);
+        final = await Post(eliminar, new() { ["gobierno"] = "PRUEBA_GOB" });
+        Assert.Contains("PRUEBA_GOB eliminado del catálogo.", final);
+        Assert.DoesNotContain("<tr data-texto=\"PRUEBA_GOB ", final);
+    }
+
+    [Fact]
     public async Task Editar_y_eliminar_data_product_desde_seguimiento_semanal()
     {
         var client = fabrica.CreateClient();

@@ -1,0 +1,113 @@
+@page
+@model GobiernoDatos.Web.Pages.Reglas.IndexModel
+@{
+    ViewData["Title"] = "Reglas de calidad";
+    ViewData["Nav"] = "reglas";
+    var activas = Model.Todas.Count(r => r.Activa);
+    var bajas = Model.Todas.Count - activas;
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Reglas de calidad</h1>
+        <p>Catálogo de reglas: alta, cambio y baja · los resultados se cargan en Calidad</p>
+    </div>
+    <div class="acciones">
+        <a class="btn btn-primario" asp-page="Editar">Nueva regla</a>
+    </div>
+</header>
+
+<section class="panel" aria-label="Reglas">
+    <div class="panel-cab">
+        <div class="chips" aria-label="Filtrar por estado">
+            <a class="chip" asp-route-estado="" aria-pressed="@(Model.Estado is null ? "true" : "false")">Activas <span class="cuenta">@activas</span></a>
+            <a class="chip" asp-route-estado="BAJAS" aria-pressed="@(Model.Estado == "BAJAS" ? "true" : "false")">Dadas de baja <span class="cuenta">@bajas</span></a>
+            <a class="chip" asp-route-estado="TODAS" aria-pressed="@(Model.Estado == "TODAS" ? "true" : "false")">Todas <span class="cuenta">@Model.Todas.Count</span></a>
+        </div>
+        <label class="campo en-linea compacto">Buscar
+            <input type="search" placeholder="Código, descripción, objeto…" data-filtro-tabla="#tabla-reglas" style="width:240px" />
+        </label>
+    </div>
+
+    @if (Model.Filas.Count == 0)
+    {
+        <div class="vacio">No hay reglas en esta vista.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-reglas">
+                <thead>
+                    <tr><th>Código</th><th class="col-nombre">Descripción</th><th>Tipo</th><th>Gobierno</th><th>Dimensión</th><th>Objetos BW</th><th>Etapa</th><th><span class="oculto-visual">Acciones</span></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.Filas)
+                    {
+                        <tr data-texto="@r.Codigo @r.Descripcion @r.Tipo @r.Gobierno @string.Join(" ", r.Objetos) @r.Responsable">
+                            <td class="mono nowrap"><a asp-page="Editar" asp-route-id="@r.ReglaId">@r.Codigo</a></td>
+                            <td>@r.Descripcion @if (r.Responsable is not null) { <span class="ayuda" style="display:block">@r.Responsable</span> }</td>
+                            <td>@Ui.Texto(r.Tipo, "—")</td>
+                            <td>@Ui.Texto(r.Gobierno, "—")</td>
+                            <td>@(r.Dimension is null ? "—" : DefinicionRegla.Etiqueta(r.Dimension))</td>
+                            <td class="mono">@string.Join(", ", r.Objetos)</td>
+                            <td>
+                                @if (!r.Activa) { <span class="badge badge-error">Baja</span> }
+                                else { <span class="badge @(r.Etapa == "Operación PRD" ? "badge-ok" : "badge-neutro")">@Ui.Texto(r.Etapa, "Sin etapa")</span> }
+                            </td>
+                            <td class="acciones-fila nowrap">
+                                <a class="btn btn-chico" asp-page="Editar" asp-route-id="@r.ReglaId">Editar</a>
+                                @if (r.Activa)
+                                {
+                                    <button type="button" class="btn btn-chico btn-peligro" data-baja-regla="@r.ReglaId" data-codigo="@r.Codigo">Dar de baja</button>
+                                }
+                                else
+                                {
+                                    <form method="post" asp-page-handler="Reactivar" asp-route-estado="@Model.Estado" class="inline"
+                                          data-confirmar="¿Reactivar la regla @r.Codigo? Vuelve a la etapa que tenía antes de la baja.">
+                                        <input type="hidden" name="reglaId" value="@r.ReglaId" />
+                                        <input type="hidden" name="codigo" value="@r.Codigo" />
+                                        <button type="submit" class="btn btn-chico">Reactivar</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <div class="panel-pie"><span>La baja es lógica: la regla deja de estar activa y conserva su historial de resultados de calidad.</span></div>
+</section>
+
+<dialog id="dlg-baja" class="dialogo" aria-labelledby="h-baja">
+    <form method="post" asp-page-handler="Baja" asp-route-estado="@Model.Estado" id="form-baja">
+        <h2 id="h-baja">Dar de baja la regla <span class="mono" id="baja-codigo"></span></h2>
+        <p class="ayuda">La regla queda inactiva en la etapa «Baja». Su historial de resultados se conserva y se puede reactivar después.</p>
+        <input type="hidden" name="reglaId" />
+        <input type="hidden" name="codigo" />
+        <label class="campo">Motivo *
+            <textarea name="motivo" rows="3" required maxlength="1000" placeholder="Por qué se da de baja"></textarea>
+        </label>
+        <div class="form-fila" style="justify-content:flex-end">
+            <button type="button" class="btn" id="btn-cancelar-baja" style="flex:0 0 auto">Cancelar</button>
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">Dar de baja</button>
+        </div>
+    </form>
+</dialog>
+
+@section Scripts {
+<script>
+(() => {
+    const dlg = document.getElementById('dlg-baja'), f = document.getElementById('form-baja');
+    document.querySelectorAll('[data-baja-regla]').forEach(b => b.addEventListener('click', () => {
+        f.elements.reglaId.value = b.dataset.bajaRegla;
+        f.elements.codigo.value = b.dataset.codigo;
+        f.elements.motivo.value = '';
+        document.getElementById('baja-codigo').textContent = b.dataset.codigo;
+        dlg.showModal();
+        f.elements.motivo.focus();
+    }));
+    document.getElementById('btn-cancelar-baja').addEventListener('click', () => dlg.close());
+})();
+</script>
+}

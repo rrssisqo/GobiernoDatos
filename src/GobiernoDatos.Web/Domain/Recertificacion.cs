@@ -37,6 +37,17 @@ public static class ReglasRecertificacion
         if (string.IsNullOrWhiteSpace(ticket)) throw new DomainException("Indica el ticket de la ejecución.");
     }
 
+    // Renglón del catálogo GOBIERNO → macro área: ambos obligatorios, sin espacios sobrantes.
+    public static (string Gobierno, string MacroArea) MapeoGobierno(string? gobierno, string? macroArea)
+    {
+        var g = (gobierno ?? "").Trim();
+        var m = (macroArea ?? "").Trim();
+        if (g.Length == 0) throw new DomainException("Indica el GOBIERNO tal como llega en el extracto de HANA (por ejemplo CSC).");
+        if (m.Length == 0) throw new DomainException("Indica la macro área.");
+        if (g.Length > 100 || m.Length > 100) throw new DomainException("El gobierno y la macro área admiten máximo 100 caracteres.");
+        return (g, m);
+    }
+
     public static string Etiqueta(Decision d) => d == Decision.CONTINUA ? "Continúa" : "Baja";
 
     public static string Etiqueta(EstatusEvento e) => e switch
