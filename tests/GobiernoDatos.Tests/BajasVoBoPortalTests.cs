@@ -56,6 +56,46 @@ public class BajasVoBoPortalTests(PortalTests.Fabrica fabrica) : IClassFixture<P
         Assert.True(recert.ResponderVoBo(id, true, "gerenteti@ejemplo.local", "Autorizado"));
         html = await client.GetStringAsync("/Recertificacion/Bajas?macro=TI");
         Assert.Contains("Autorizado", WebUtility.HtmlDecode(Regex.Match(html, "<tr data-macro=\"TI\">.*?</tr>", RegexOptions.Singleline).Value));
+        Assert.Contains("Por asignar a infraestructura", WebUtility.HtmlDecode(html));
+        Assert.DoesNotContain("handler=Ejecutar", html);
+
+        // Sin responsable de infraestructura el botón está deshabilitado; se configura una sola vez en Macro áreas.
+        Assert.Contains("Sin responsable de infraestructura", WebUtility.HtmlDecode(html));
+        macros = await client.GetStringAsync("/Recertificacion/MacroAreas");
+        r = await client.PostAsync(Accion(macros, "AsignarResponsableInfra"), new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["usuarioRed"] = @"MABENET\infra1", ["__RequestVerificationToken"] = Token(macros),
+        }));
+        Assert.Contains("Responsable de infraestructura asignado", WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync()));
+
+        // Asignación de la macro área: solo el número de cambio; se envía el correo con el Excel al responsable.
+        var correos = (EnviadorSimulado)fabrica.Services.GetRequiredService<IEnviadorCorreo>();
+        html = await client.GetStringAsync("/Recertificacion/Bajas?macro=TI");
+        Assert.DoesNotContain("name=\"usuarioRed\"", Regex.Match(html, "<div class=\"asignacion-infra\".*?</form>", RegexOptions.Singleline).Value);
+        r = await client.PostAsync(Accion(html, "AsignarInfra"), new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["macroAreaId"] = ti.MacroAreaId.ToString(), ["macroArea"] = "TI", ["cambio"] = "CHG-100",
+            ["__RequestVerificationToken"] = Token(html),
+        }));
+        final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.Contains("TI: 1 bajas asignadas a MABENET\\infra1 con el cambio CHG-100. Se le envió el correo con el Excel a infra1@ejemplo.local.", final);
+        Assert.Contains("Correo enviado", Regex.Match(final, "<div class=\"asignacion-fila\" data-macro-infra=\"TI\">.*?</form>", RegexOptions.Singleline).Value);
+        Assert.DoesNotContain("handler=AsignarInfra", Regex.Match(final, "<section[^>]*id=\"vobo\".*?</section>", RegexOptions.Singleline).Value);   // ya no está en el panel de VoBo
+        var aviso = correos.Enviados[^1];
+        Assert.Equal("infra1@ejemplo.local", aviso.Para);
+        Assert.Contains("CHG-100", aviso.Asunto);
+        var adjunto = Assert.Single(aviso.Adjuntos!);
+        Assert.EndsWith(".xlsx", adjunto.Nombre);
+        using (var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(adjunto.Contenido)))
+        {
+            var hoja = libro.Worksheet(1);
+            Assert.Equal("Cambio", hoja.Cell(1, 1).GetString());
+            Assert.Equal(("CHG-100", baja.UsuarioCodigo, baja.Rol), (hoja.Cell(2, 1).GetString(), hoja.Cell(2, 4).GetString(), hoja.Cell(2, 6).GetString()));
+        }
+
+        // La tabla de bajas muestra el responsable y el cambio; el ticket viene prellenado con el número de cambio.
+        html = await client.GetStringAsync("/Recertificacion/Bajas?macro=TI");
+        Assert.Contains("value=\"CHG-100\"", Regex.Match(html, "<form[^>]*handler=Ejecutar.*?</form>", RegexOptions.Singleline).Value);
         r = await client.PostAsync(Accion(html, "Ejecutar"), new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["accesoId"] = baja.AccesoId.ToString(), ["ticket"] = "INC-777", ["__RequestVerificationToken"] = Token(html),

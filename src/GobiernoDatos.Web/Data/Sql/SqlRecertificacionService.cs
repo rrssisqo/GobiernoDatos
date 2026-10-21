@@ -320,6 +320,13 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
                                   string estatus, string solicitado_por, DateTime fecha_solicitud, DateTime? fecha_envio, DateTime? fecha_respuesta,
                                   string? respondido_por, string? comentario_respuesta, string? motivo_cancelacion);
 
+    private sealed record InfraRow(long asignacion_id, int evento_id, int macro_area_id, string responsable_usuario_red, string responsable_nombre,
+                                   string responsable_correo, string cambio, int bajas, string asignado_por, DateTime fecha_asignacion,
+                                   bool notificado, string? error_notificacion);
+
+    private static AsignacionInfra Infra(InfraRow i) => new(i.asignacion_id, i.evento_id, i.macro_area_id, i.responsable_usuario_red,
+        i.responsable_nombre, i.responsable_correo, i.cambio, i.bajas, i.asignado_por, i.fecha_asignacion, i.notificado, i.error_notificacion);
+
     private static VoBoGerente VoBo(VoBoRow v) => new(v.vobo_id, v.evento_id, v.macro_area_id, v.gerente_nombre, v.gerente_correo, v.bajas,
         Enum.Parse<EstatusVoBo>(v.estatus), v.solicitado_por, v.fecha_solicitud, v.fecha_envio, v.fecha_respuesta, v.respondido_por,
         v.comentario_respuesta, v.motivo_cancelacion);
@@ -345,12 +352,20 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
               AND v.vobo_id = (SELECT MAX(x.vobo_id) FROM gd.recert_vobo AS x WHERE x.evento_id = v.evento_id AND x.macro_area_id = v.macro_area_id);
 
             SELECT usuario_red, nombre, correo FROM gd.recert_gerente;
+
+            SELECT i.asignacion_id, i.evento_id, i.macro_area_id, i.responsable_usuario_red, i.responsable_nombre, i.responsable_correo,
+                   i.cambio, i.bajas, i.asignado_por, i.fecha_asignacion, i.notificado, i.error_notificacion
+            FROM gd.recert_asignacion_infra AS i
+            WHERE i.evento_id = @eventoId
+              AND i.asignacion_id = (SELECT MAX(x.asignacion_id) FROM gd.recert_asignacion_infra AS x
+                                     WHERE x.evento_id = i.evento_id AND x.macro_area_id = i.macro_area_id);
             """, new { eventoId });
         var macros = m.Read<MacroBajasRow>().ToList();
         var vobos = m.Read<VoBoRow>().ToDictionary(v => v.macro_area_id, VoBo);
         var gerente = m.ReadSingleOrDefault<GerenteRow>() is { } g ? new GerenteVoBo(g.usuario_red, g.nombre, g.correo) : null;
+        var infra = m.Read<InfraRow>().ToDictionary(i => i.macro_area_id, Infra);
         return macros.Select(x => new BajasMacroArea(x.macro_area_id, x.macro_area, x.bajas, x.ejecutadas, x.por_decidir,
-            gerente, vobos.GetValueOrDefault(x.macro_area_id))).ToList();
+            gerente, vobos.GetValueOrDefault(x.macro_area_id), infra.GetValueOrDefault(x.macro_area_id))).ToList();
     }
 
     private sealed record IncluidoRow(string nombre, DateTime fecha, int accesos_3m);
@@ -562,6 +577,70 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
         return c.ExecuteScalar<long>("gd.sp_vobo_solicitar", new { evento_id = eventoId, macro_area_id = macroAreaId, solicitado_por = usuario },
                                      commandType: CommandType.StoredProcedure);
     });
+
+    public GerenteVoBo? ResponsableInfra()
+    {
+        using var c = db.Abrir();
+        return c.QuerySingleOrDefault<GerenteRow>("SELECT usuario_red, nombre, correo FROM gd.recert_responsable_infra") is { } r
+            ? new GerenteVoBo(r.usuario_red, r.nombre, r.correo) : null;
+    }
+
+    public void AsignarResponsableInfra(string usuarioRed, string usuario)
+    {
+        var login = Login(usuarioRed);
+        var nombre = directorio.BuscarNombre(login) ?? throw new DomainException($"El usuario {login} no existe en Active Directory.");
+        var correo = directorio.BuscarCorreo(login) ?? throw new DomainException($"{nombre} no tiene correo en Active Directory: no se le podría avisar.");
+        using var c = db.Abrir();
+        c.Execute("""
+            MERGE gd.recert_responsable_infra WITH (HOLDLOCK) AS t
+            USING (SELECT CAST(1 AS TINYINT) AS responsable_id) AS s ON t.responsable_id = s.responsable_id
+            WHEN MATCHED THEN UPDATE SET usuario_red = @login, nombre = @nombre, correo = @correo, usuario = @usuario, fecha_registro = SYSDATETIME()
+            WHEN NOT MATCHED THEN INSERT (responsable_id, usuario_red, nombre, correo, usuario) VALUES (1, @login, @nombre, @correo, @usuario);
+            """, new { login, nombre, correo, usuario });
+    }
+
+    public void QuitarResponsableInfra()
+    {
+        using var c = db.Abrir();
+        if (c.Execute("DELETE FROM gd.recert_responsable_infra") == 0) throw new DomainException("No hay responsable de infraestructura asignado.");
+    }
+
+    public AsignacionInfra AsignarInfraestructura(int eventoId, int macroAreaId, string cambio, string usuario)
+    {
+        cambio = ReglasRecertificacion.Cambio(cambio);
+        return db.EnTransaccion((c, tx) =>
+        {
+            var responsable = c.QuerySingleOrDefault<GerenteRow>("SELECT usuario_red, nombre, correo FROM gd.recert_responsable_infra", transaction: tx)
+                ?? throw new DomainException("No hay responsable de infraestructura asignado (Recertificación → Macro áreas).");
+            var (login, nombre, correo) = (responsable.usuario_red, responsable.nombre, responsable.correo);
+            if (c.ExecuteScalar<int>("""
+                SELECT COUNT(*) FROM gd.recert_vobo WITH (UPDLOCK, HOLDLOCK)
+                WHERE evento_id = @eventoId AND macro_area_id = @macroAreaId AND estatus = 'AUTORIZADA'
+                """, new { eventoId, macroAreaId }, tx) == 0)
+                throw new DomainException("Las bajas de la macro área necesitan el VoBo autorizado del gerente antes de asignarlas.");
+            var pendientes = c.ExecuteScalar<int>("""
+                SELECT COUNT(*) FROM gd.vw_recert_evidencia
+                WHERE evento_id = @eventoId AND macro_area_id = @macroAreaId AND decision = 'BAJA' AND ticket IS NULL
+                """, new { eventoId, macroAreaId }, tx);
+            if (pendientes == 0) throw new DomainException("La macro área no tiene bajas pendientes de ejecutar.");
+            var row = c.QuerySingle<InfraRow>("""
+                INSERT INTO gd.recert_asignacion_infra (evento_id, macro_area_id, responsable_usuario_red, responsable_nombre, responsable_correo,
+                                                        cambio, bajas, asignado_por)
+                OUTPUT inserted.asignacion_id, inserted.evento_id, inserted.macro_area_id, inserted.responsable_usuario_red, inserted.responsable_nombre,
+                       inserted.responsable_correo, inserted.cambio, inserted.bajas, inserted.asignado_por, inserted.fecha_asignacion,
+                       inserted.notificado, inserted.error_notificacion
+                VALUES (@eventoId, @macroAreaId, @login, @nombre, @correo, @cambio, @pendientes, @usuario)
+                """, new { eventoId, macroAreaId, login, nombre, correo, cambio, pendientes, usuario }, tx);
+            return Infra(row);
+        });
+    }
+
+    public void RegistrarNotificacionInfra(long asignacionId, bool enviado, string? error)
+    {
+        using var c = db.Abrir();
+        c.Execute("UPDATE gd.recert_asignacion_infra SET notificado = @enviado, error_notificacion = LEFT(@error, 400) WHERE asignacion_id = @asignacionId",
+                  new { asignacionId, enviado, error });
+    }
 
     public bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario)
     {

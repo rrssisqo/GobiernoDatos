@@ -48,6 +48,15 @@ public static class ReglasRecertificacion
         return (g, m);
     }
 
+    // Número de cambio de infraestructura (máximo 60, como el ticket).
+    public static string Cambio(string? cambio)
+    {
+        var c = (cambio ?? "").Trim();
+        if (c.Length == 0) throw new DomainException("Indica el número de cambio.");
+        if (c.Length > 60) throw new DomainException("El número de cambio admite máximo 60 caracteres.");
+        return c;
+    }
+
     public static string Etiqueta(Decision d) => d == Decision.CONTINUA ? "Continúa" : "Baja";
 
     public static string Etiqueta(EstatusEvento e) => e switch

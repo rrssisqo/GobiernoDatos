@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace GobiernoDatos.Web.Pages.Recertificacion;
 
-public class BajasModel(IRecertificacionService recert, IUsuarioActual usuario) : PortalPageModel
+public class BajasModel(IRecertificacionService recert, IUsuarioActual usuario, NotificacionesInfra infra) : PortalPageModel
 {
     [BindProperty(SupportsGet = true)] public int? Evento { get; set; }
     [BindProperty(SupportsGet = true)] public string? Estatus { get; set; }     // null, PENDIENTES, EJECUTADAS
@@ -17,6 +17,8 @@ public class BajasModel(IRecertificacionService recert, IUsuarioActual usuario) 
     public IReadOnlyList<FilaBaja> Filas { get; private set; } = [];
     public FilaBaja? Seleccionada { get; private set; }
     public IReadOnlyList<PasoTraza> Traza { get; private set; } = [];
+    // Responsable único de infraestructura (se configura en Macro áreas).
+    public GerenteVoBo? ResponsableInfra { get; private set; }
     // VoBo del gerente por macro área (con el filtro aplicado).
     public IReadOnlyList<BajasMacroArea> MacroAreas { get; private set; } = [];
     // Bajas de la macro área filtrada (todas si no hay filtro), para los indicadores.
@@ -52,6 +54,7 @@ public class BajasModel(IRecertificacionService recert, IUsuarioActual usuario) 
             _ => delArea,
         }).ToList();
         MacroAreas = Tablero.MacroAreas.Where(m => Macro is null || m.MacroArea == Macro).ToList();
+        ResponsableInfra = recert.ResponsableInfra();
         Seleccionada = Tablero.Filas.FirstOrDefault(f => f.AccesoId == Acceso) ?? Filas.FirstOrDefault();
         if (Seleccionada is not null) Traza = recert.Traza(Seleccionada.AccesoId);
         return Page();
@@ -70,6 +73,21 @@ public class BajasModel(IRecertificacionService recert, IUsuarioActual usuario) 
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
         return Ejecutar(() => recert.AnularEjecucion(accesoId, motivo ?? "", usuario.Nombre),
             $"Ticket {ticket} quitado. La baja vuelve a pendiente de ejecución.", () => RedirectToPage(new { Evento, Estatus, Macro, acceso = accesoId }));
+    }
+
+    // Asigna las bajas pendientes de la macro área a un responsable de infraestructura con el número de cambio
+    // y le envía el correo con las bajas en Excel.
+    public IActionResult OnPostAsignarInfra(int macroAreaId, string? macroArea, string? cambio)
+    {
+        if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
+        return Ejecutar(() =>
+            {
+                var r = infra.Asignar(Evento!.Value, macroAreaId, cambio ?? "", usuario.Login);
+                var texto = $"{macroArea}: {r.Asignacion.Bajas} bajas asignadas a {r.Asignacion.ResponsableNombre} con el cambio {r.Asignacion.Cambio}.";
+                if (r.Notificado) MensajeOk = texto + $" Se le envió el correo con el Excel a {r.Asignacion.ResponsableCorreo}.";
+                else MensajeError = texto + $" No se pudo enviar el correo: {r.Error}";
+            },
+            "", () => RedirectToPage(null, null, new { Evento, Estatus, Macro }, "h-b"));
     }
 
     // Pide (o vuelve a pedir) el VoBo del gerente; Power Automate lo envía.

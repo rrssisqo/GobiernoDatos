@@ -36,6 +36,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/008_auditoria_columnas_hana.sql", "db/migrations/009_recert_recordatorio.sql",
                                         "db/migrations/010_recert_gobierno_macro_area.sql", "db/migrations/011_recert_vobo_gerente.sql",
                                         "db/migrations/012_recert_gerente_unico.sql", "db/migrations/013_recert_anular_ticket.sql",
+                                        "db/migrations/014_recert_asignacion_infra.sql", "db/migrations/015_recert_responsable_infra_unico.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -299,6 +300,16 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.True(recert.ResponderVoBo(nuevo.VoBoId, true, "gerente@mabe.com.mx", "De acuerdo"));
         Assert.True(Ti().Autorizada);
         Assert.Throws<DomainException>(() => recert.SolicitarVoBo(evento.EventoId, ti.MacroAreaId, "admin"));   // ya autorizado
+
+        // Asignación a infraestructura con número de cambio y el resultado del aviso.
+        Assert.Throws<DomainException>(() => recert.AsignarInfraestructura(evento.EventoId, ti.MacroAreaId, "CHG-001", "admin"));   // sin responsable
+        recert.AsignarResponsableInfra("cprueba", "admin");                                      // uno solo para todas las macro áreas
+        Assert.Equal("cprueba@mabe.com.mx", recert.ResponsableInfra()!.Correo);
+        Assert.Throws<DomainException>(() => recert.AsignarInfraestructura(evento.EventoId, ti.MacroAreaId, " ", "admin"));
+        var asignacion = recert.AsignarInfraestructura(evento.EventoId, ti.MacroAreaId, " CHG-001 ", "admin");
+        Assert.Equal(("CHG-001", 1, "cprueba@mabe.com.mx", false), (asignacion.Cambio, asignacion.Bajas, asignacion.ResponsableCorreo, asignacion.Notificado));
+        recert.RegistrarNotificacionInfra(asignacion.AsignacionId, true, null);
+        Assert.Equal(("CHG-001", true), (Ti().Infra!.Cambio, Ti().Infra!.Notificado));
 
         Assert.Equal(5, recert.CerrarEvento(evento.EventoId));                                   // otras macro áreas: pendientes reportados
         Assert.Throws<DomainException>(() => recert.Decidir(baja.AccesoId, Decision.CONTINUA, null, cert));

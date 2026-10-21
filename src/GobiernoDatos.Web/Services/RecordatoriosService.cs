@@ -99,11 +99,11 @@ public sealed class RecordatoriosService(IRecertificacionService recert, IDirect
     private string? Liga() =>
         string.IsNullOrWhiteSpace(opciones.Value.Correo.UrlPortal) ? null : opciones.Value.Correo.UrlPortal.TrimEnd('/') + "/Recertificacion/Mi";
 
-    private static string Plantilla(string titulo, string cuerpo) =>
+    internal static string Plantilla(string titulo, string cuerpo) =>
         "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#17212B;max-width:640px\">" +
         $"<h2 style=\"font-size:18px;margin:0 0 12px\">{H(titulo)}</h2>{cuerpo}" +
         "<p style=\"color:#5B6672;font-size:12px;margin-top:24px\">Mensaje automático del portal de Gobierno de Datos. No respondas a este correo.</p></div>";
 
     private static readonly System.Globalization.CultureInfo Cultura = new("es-MX");
-    private static string H(string texto) => WebUtility.HtmlEncode(texto);
+    internal static string H(string texto) => WebUtility.HtmlEncode(texto);
 }

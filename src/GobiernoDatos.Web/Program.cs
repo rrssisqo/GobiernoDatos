@@ -84,6 +84,7 @@ if (!string.IsNullOrWhiteSpace(servidorCorreo) || builder.Environment.IsProducti
 else
     builder.Services.AddSingleton<IEnviadorCorreo, EnviadorSimulado>();
 builder.Services.AddSingleton<RecordatoriosService>();
+builder.Services.AddSingleton<NotificacionesInfra>();
 
 // Búsqueda de usuarios para asignar certificadores: Entra ID si está configurado o en producción; en desarrollo, simulada.
 builder.Services.AddHttpClient("graph", c => c.Timeout = TimeSpan.FromSeconds(20));

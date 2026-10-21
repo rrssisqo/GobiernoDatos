@@ -123,6 +123,46 @@ else
                     </label>
                 </form>
             </div>
+            @{ var porAsignar = Model.MacroAreas.Where(m => m.Autorizada && m.Bajas > m.Ejecutadas).ToList(); }
+            @if (porAsignar.Count > 0)
+            {
+                <div class="asignacion-infra" id="asignacion-infra">
+                    <h3>Asignar a infraestructura</h3>
+                    @if (Model.ResponsableInfra is { } ri)
+                    {
+                        <p class="ayuda">Responsable: <strong>@ri.Nombre</strong> (@ri.Correo). Recibe un correo con el número de cambio y las bajas por ejecutar en Excel.
+                           <a asp-page="MacroAreas" asp-fragment="responsable-infra">Cambiar</a></p>
+                    }
+                    else
+                    {
+                        <p class="ayuda"><span class="badge badge-aviso">Sin responsable de infraestructura</span>
+                           Asígnalo en <a asp-page="MacroAreas" asp-fragment="responsable-infra">Macro áreas</a> para poder asignar las bajas.</p>
+                    }
+                    @foreach (var m in porAsignar)
+                    {
+                        <div class="asignacion-fila" data-macro-infra="@m.MacroArea">
+                            <div class="asignacion-estado">
+                                <strong>@m.MacroArea</strong> <span class="sutil">· @(m.Bajas - m.Ejecutadas) por ejecutar</span>
+                                @if (m.Infra is { } inf)
+                                {
+                                    <span class="secundario">Asignado a @inf.ResponsableNombre · cambio <span class="mono">@inf.Cambio</span> · @Ui.FechaHora(inf.Fecha)</span>
+                                    @if (inf.Notificado) { <span class="badge badge-ok">Correo enviado</span> }
+                                    else { <span class="badge badge-error" title="@inf.Error">Correo no enviado</span> <span class="ayuda">@inf.Error</span> }
+                                }
+                            </div>
+                            <form method="post" asp-page-handler="AsignarInfra" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" asp-route-macro="@Model.Macro"
+                                  class="form-fila compacto"
+                                  data-confirmar="Se asignarán @(m.Bajas - m.Ejecutadas) bajas de @m.MacroArea y se enviará el correo con el Excel al responsable. ¿Continuar?">
+                                <input type="hidden" name="macroAreaId" value="@m.MacroAreaId" />
+                                <input type="hidden" name="macroArea" value="@m.MacroArea" />
+                                <input type="text" name="cambio" required maxlength="60" placeholder="Número de cambio" value="@m.Infra?.Cambio"
+                                       aria-label="Número de cambio para @m.MacroArea" class="mono" style="flex:1 1 160px" />
+                                <button type="submit" class="btn btn-chico btn-primario" style="flex:0 0 auto" disabled="@(Model.ResponsableInfra is null)">@(m.Infra is null ? "Asignar y avisar" : "Reasignar y avisar")</button>
+                            </form>
+                        </div>
+                    }
+                </div>
+            }
             @if (Model.Filas.Count == 0)
             {
                 <div class="vacio">@(t.Decididas == 0 ? "Ningún certificador ha marcado bajas en este evento." : "No hay bajas con este estatus.")</div>
@@ -131,7 +171,7 @@ else
             {
                 <div class="tabla-scroll">
                     <table class="tabla">
-                        <thead><tr><th class="col-nombre">Usuario</th><th>Vista · rol a retirar</th><th>Macro área</th><th>Decidió</th><th>Comentario</th><th>Ejecución</th></tr></thead>
+                        <thead><tr><th class="col-nombre">Usuario</th><th>Vista · rol a retirar</th><th>Macro área</th><th>Decidió</th><th>Comentario</th><th>Infraestructura</th><th>Ejecución</th></tr></thead>
                         <tbody>
                             @foreach (var f in Model.Filas)
                             {
@@ -143,6 +183,8 @@ else
                                     <td>@f.MacroArea</td>
                                     <td>@f.DecididoPor<span class="ayuda" style="display:block">@Ui.FechaHora(f.FechaDecision)</span></td>
                                     <td>@f.Comentario</td>
+                                    <td>@if (area?.Infra is { } infra) { @infra.ResponsableNombre<span class="secundario">Cambio <span class="mono">@infra.Cambio</span></span> }
+                                        else { <span class="sutil">—</span> }</td>
                                     <td>
                                         @if (f.Ejecucion is not null)
                                         {
@@ -154,11 +196,15 @@ else
                                         {
                                             <span class="badge badge-aviso">Requiere VoBo del gerente</span>
                                         }
+                                        else if (area.Infra is null)
+                                        {
+                                            <span class="badge badge-aviso">Por asignar a infraestructura</span>
+                                        }
                                         else
                                         {
                                             <form method="post" asp-page-handler="Ejecutar" asp-route-evento="@t.Evento.EventoId" asp-route-estatus="@Model.Estatus" asp-route-macro="@Model.Macro" class="form-fila compacto" style="min-width:260px">
                                                 <input type="hidden" name="accesoId" value="@f.AccesoId" />
-                                                <input type="text" name="ticket" aria-label="Ticket" placeholder="Ticket" required maxlength="60" style="flex:1 1 100px" />
+                                                <input type="text" name="ticket" aria-label="Ticket" placeholder="Ticket" required maxlength="60" value="@area.Infra.Cambio" style="flex:1 1 100px" />
                                                 <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Registrar ejecución</button>
                                             </form>
                                         }

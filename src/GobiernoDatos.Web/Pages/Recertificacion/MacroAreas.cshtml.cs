@@ -12,6 +12,7 @@ public class MacroAreasModel(IRecertificacionService recert, IUsuarioActual usua
     public IReadOnlyList<MapeoGobierno> Mapeos { get; private set; } = [];
     public IReadOnlyList<string> MacroAreas { get; private set; } = [];
     public GerenteVoBo? Gerente { get; private set; }
+    public GerenteVoBo? ResponsableInfra { get; private set; }
 
     public IActionResult OnGet()
     {
@@ -19,6 +20,7 @@ public class MacroAreasModel(IRecertificacionService recert, IUsuarioActual usua
         Mapeos = recert.MapeosGobierno();
         MacroAreas = recert.Certificadores().Select(m => m.MacroArea).ToList();
         Gerente = recert.Gerente();
+        ResponsableInfra = recert.ResponsableInfra();
         return Page();
     }
 
@@ -36,6 +38,13 @@ public class MacroAreasModel(IRecertificacionService recert, IUsuarioActual usua
 
     public IActionResult OnPostQuitarGerente() =>
         Admin(() => recert.QuitarGerente(), "Se quitó el gerente.", "gerente");
+
+    public IActionResult OnPostAsignarResponsableInfra(string? usuarioRed) =>
+        Admin(() => recert.AsignarResponsableInfra(usuarioRed ?? "", usuario.Login),
+              "Responsable de infraestructura asignado: retira los roles de todas las macro áreas.", "responsable-infra");
+
+    public IActionResult OnPostQuitarResponsableInfra() =>
+        Admin(() => recert.QuitarResponsableInfra(), "Se quitó el responsable de infraestructura.", "responsable-infra");
 
     private IActionResult Admin(Action accion, string ok, string? fragmento = null)
     {

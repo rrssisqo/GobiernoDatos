@@ -284,3 +284,10 @@ section[id] { scroll-margin-top: 16px; }
 
 /* Acción secundaria destructiva con apariencia de enlace (Quitar ticket). */
 .enlace-peligro { border: 0; background: none; padding: 0 0 0 8px; color: var(--error-tx); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+
+/* Bajas: asignación a infraestructura arriba de la tabla de bajas. */
+.asignacion-infra { padding: 14px 20px; border-bottom: 1px solid var(--borde-2); background: var(--fondo); display: flex; flex-direction: column; gap: 10px; }
+.asignacion-infra h3 { margin: 0; font-size: 15px; }
+.asignacion-fila { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.asignacion-estado { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; }
+.asignacion-fila form { flex: 3 1 420px; }

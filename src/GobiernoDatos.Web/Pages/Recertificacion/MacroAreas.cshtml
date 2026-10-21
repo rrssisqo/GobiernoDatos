@@ -8,7 +8,7 @@
 <header class="encabezado">
     <div class="titulo">
         <h1>Macro áreas</h1>
-        <p>A qué macro área va cada GOBIERNO del extracto de HANA y quién autoriza las bajas</p>
+        <p>A qué macro área va cada GOBIERNO del extracto de HANA, quién autoriza las bajas y quién las ejecuta</p>
     </div>
     <div class="acciones">
         <a class="btn" asp-page="Eventos" asp-fragment="certificadores">Certificadores</a>
@@ -44,6 +44,39 @@
                 <span class="ayuda seleccionado" aria-live="polite"></span>
             </div>
             <button type="submit" class="btn btn-primario" style="flex:0 0 auto">@(Model.Gerente is null ? "Asignar" : "Cambiar")</button>
+        </form>
+    </div>
+</section>
+
+<section class="panel" aria-labelledby="h-responsable-infra" id="responsable-infra">
+    <div class="panel-cab">
+        <h2 id="h-responsable-infra">Responsable de infraestructura</h2>
+        <span class="sutil">Retira los roles de todas las macro áreas: recibe el número de cambio y las bajas en Excel por correo.</span>
+    </div>
+    <div class="panel-cuerpo form-fila">
+        <div style="flex:1 1 280px">
+            @if (Model.ResponsableInfra is null)
+            {
+                <span class="badge badge-aviso">Sin responsable</span>
+                <span class="ayuda" style="display:block">Sin responsable no se pueden asignar las bajas autorizadas.</span>
+            }
+            else
+            {
+                <form method="post" asp-page-handler="QuitarResponsableInfra" class="inline" data-confirmar="¿Quitar a @Model.ResponsableInfra.Nombre como responsable de infraestructura?">
+                    <span class="badge badge-ok">@Model.ResponsableInfra.Nombre · @Model.ResponsableInfra.UsuarioRed
+                        <button type="submit" title="Quitar" style="border:0;background:none;cursor:pointer;padding:0 0 0 6px;color:inherit">✕</button></span>
+                    <span class="secundario">@Model.ResponsableInfra.Correo</span>
+                </form>
+            }
+        </div>
+        <form method="post" asp-page-handler="AsignarResponsableInfra" class="form-fila compacto" id="form-responsable-infra" style="flex:2 1 420px">
+            <div class="buscador-usuario" style="flex:2 1 260px">
+                <input type="text" name="usuarioRed" required maxlength="100" autocomplete="off" placeholder="Buscar en Entra ID: nombre, correo o MABENET\usuario"
+                       aria-label="Buscar responsable de infraestructura" role="combobox" aria-autocomplete="list" aria-expanded="false"
+                       aria-controls="sugerencias-usuario" data-buscar-usuario="@Url.Page("Eventos", "BuscarUsuarios")" />
+                <span class="ayuda seleccionado" aria-live="polite"></span>
+            </div>
+            <button type="submit" class="btn btn-primario" style="flex:0 0 auto">@(Model.ResponsableInfra is null ? "Asignar" : "Cambiar")</button>
         </form>
     </div>
 </section>

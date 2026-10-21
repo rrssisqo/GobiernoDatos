@@ -6,7 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace GobiernoDatos.Web.Services;
 
-public sealed record MensajeCorreo(string Para, string Asunto, string CuerpoHtml);
+public sealed record AdjuntoCorreo(string Nombre, byte[] Contenido, string TipoContenido);
+
+public sealed record MensajeCorreo(string Para, string Asunto, string CuerpoHtml, IReadOnlyList<AdjuntoCorreo>? Adjuntos = null);
 
 public interface IEnviadorCorreo
 {
@@ -37,6 +39,8 @@ public sealed class EnviadorSmtp(IOptions<GobiernoDatosOptions> opciones, ILogge
                 Subject = mensaje.Asunto, Body = mensaje.CuerpoHtml, IsBodyHtml = true,
                 SubjectEncoding = System.Text.Encoding.UTF8, BodyEncoding = System.Text.Encoding.UTF8,
             };
+            foreach (var a in mensaje.Adjuntos ?? [])
+                correo.Attachments.Add(new Attachment(new MemoryStream(a.Contenido), a.Nombre, a.TipoContenido));
             smtp.Send(correo);
         }
         catch (Exception ex) when (ex is SmtpException or FormatException or InvalidOperationException)

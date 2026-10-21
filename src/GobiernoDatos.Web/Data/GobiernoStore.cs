@@ -36,7 +36,9 @@ public sealed class GobiernoStore(TimeProvider reloj)
     // GOBIERNO del extracto → nombre de la macro área (gd.recert_gobierno_macro_area).
     public Dictionary<string, MapeoGobierno> MapeoGobiernos { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Services.GerenteVoBo? GerenteVoBo { get; set; }
+    public Services.GerenteVoBo? ResponsableInfra { get; set; }
     public List<Services.VoBoGerente> VoBos { get; } = [];
+    public List<Services.AsignacionInfra> AsignacionesInfra { get; } = [];
     public List<VistaUso> Usos { get; } = [];
 
     private long _seq;

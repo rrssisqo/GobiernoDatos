@@ -39,9 +39,14 @@ public sealed record VoBoGerente(long VoBoId, int EventoId, int MacroAreaId, str
                                  EstatusVoBo Estatus, string SolicitadoPor, DateTime FechaSolicitud, DateTime? FechaEnvio,
                                  DateTime? FechaRespuesta, string? RespondidoPor, string? Comentario, string? MotivoCancelacion);
 
-// Bajas de una macro área en el evento, con su gerente y su última solicitud de VoBo.
+// Asignación de las bajas de una macro área a un responsable de infraestructura con número de cambio (migración 014).
+public sealed record AsignacionInfra(long AsignacionId, int EventoId, int MacroAreaId, string ResponsableUsuarioRed, string ResponsableNombre,
+                                     string ResponsableCorreo, string Cambio, int Bajas, string AsignadoPor, DateTime Fecha,
+                                     bool Notificado, string? Error);
+
+// Bajas de una macro área en el evento, con su gerente, su última solicitud de VoBo y su asignación a infraestructura.
 public sealed record BajasMacroArea(int MacroAreaId, string MacroArea, int Bajas, int Ejecutadas, int PorDecidir,
-                                    GerenteVoBo? Gerente, VoBoGerente? VoBo)
+                                    GerenteVoBo? Gerente, VoBoGerente? VoBo, AsignacionInfra? Infra = null)
 {
     public bool Autorizada => VoBo?.Estatus == EstatusVoBo.AUTORIZADA;
     public bool SolicitudActiva => VoBo?.Estatus is EstatusVoBo.PENDIENTE or EstatusVoBo.ENVIADA or EstatusVoBo.AUTORIZADA;
@@ -105,6 +110,14 @@ public interface IRecertificacionService
     long SolicitarVoBo(int eventoId, int macroAreaId, string usuario);
     // Respuesta del gerente (en producción la registra Power Automate con gd.sp_vobo_responder). Devuelve si se registró.
     bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario);
+    // Responsable de infraestructura único: retira los roles de todas las macro áreas (migración 015). Mismo modelo que el gerente.
+    GerenteVoBo? ResponsableInfra();
+    void AsignarResponsableInfra(string usuarioRed, string usuario);
+    void QuitarResponsableInfra();
+    // Asigna las bajas pendientes de ejecutar de la macro área (con VoBo autorizado) al responsable de infraestructura
+    // con el número de cambio. La notificación la envía NotificacionesInfra.
+    AsignacionInfra AsignarInfraestructura(int eventoId, int macroAreaId, string cambio, string usuario);
+    void RegistrarNotificacionInfra(long asignacionId, bool enviado, string? error);
     IReadOnlyList<CertificadoresMacroArea> Certificadores();
     // El certificador se identifica por su usuario de red (DOMINIO\usuario); el nombre sale del directorio.
     void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo);
@@ -320,7 +333,8 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                 .Select(g => new BajasMacroArea(g.Key, s.MacroAreas.First(m => m.MacroAreaId == g.Key).Nombre,
                     g.Count(x => x.Decision?.Decision == Decision.BAJA), g.Count(x => s.BajasEjecutadas.Any(b => b.AccesoId == x.Acceso.AccesoId)),
                     g.Count(x => x.Decision is null), s.GerenteVoBo,
-                    s.VoBos.Where(v => v.EventoId == eventoId && v.MacroAreaId == g.Key).MaxBy(v => v.VoBoId)))
+                    s.VoBos.Where(v => v.EventoId == eventoId && v.MacroAreaId == g.Key).MaxBy(v => v.VoBoId),
+                    s.AsignacionesInfra.Where(a => a.EventoId == eventoId && a.MacroAreaId == g.Key).MaxBy(a => a.AsignacionId)))
                 .OrderBy(m => m.MacroArea).ToList();
             return new TableroBajas(e, filas, filas.Count, ejecutadas.Count, dias, macros);
         }
@@ -537,6 +551,55 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                 Comentario = string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim(), FechaEnvio = s.VoBos[i].FechaEnvio ?? s.Ahora,
             };
             return true;
+        }
+    }
+
+    public GerenteVoBo? ResponsableInfra()
+    {
+        lock (s.Sync) return s.ResponsableInfra;
+    }
+
+    public void AsignarResponsableInfra(string usuarioRed, string usuario)
+    {
+        var login = Login(usuarioRed);
+        var nombre = directorio.BuscarNombre(login) ?? throw new DomainException($"El usuario {login} no existe en Active Directory.");
+        var correo = directorio.BuscarCorreo(login) ?? throw new DomainException($"{nombre} no tiene correo en Active Directory: no se le podría avisar.");
+        lock (s.Sync) s.ResponsableInfra = new GerenteVoBo(login, nombre, correo);
+    }
+
+    public void QuitarResponsableInfra()
+    {
+        lock (s.Sync)
+        {
+            if (s.ResponsableInfra is null) throw new DomainException("No hay responsable de infraestructura asignado.");
+            s.ResponsableInfra = null;
+        }
+    }
+
+    public AsignacionInfra AsignarInfraestructura(int eventoId, int macroAreaId, string cambio, string usuario)
+    {
+        cambio = ReglasRecertificacion.Cambio(cambio);
+        lock (s.Sync)
+        {
+            var (login, nombre, correo) = s.ResponsableInfra
+                ?? throw new DomainException("No hay responsable de infraestructura asignado (Recertificación → Macro áreas).");
+            if (!s.VoBos.Any(v => v.EventoId == eventoId && v.MacroAreaId == macroAreaId && v.Estatus == EstatusVoBo.AUTORIZADA))
+                throw new DomainException("Las bajas de la macro área necesitan el VoBo autorizado del gerente antes de asignarlas.");
+            var pendientes = Vigentes(eventoId).Count(x => x.Acceso.MacroAreaId == macroAreaId && x.Decision?.Decision == Decision.BAJA
+                                                         && !s.BajasEjecutadas.Any(b => b.AccesoId == x.Acceso.AccesoId));
+            if (pendientes == 0) throw new DomainException("La macro área no tiene bajas pendientes de ejecutar.");
+            var a = new AsignacionInfra(s.NuevoId(), eventoId, macroAreaId, login, nombre, correo, cambio, pendientes, usuario, s.Ahora, false, null);
+            s.AsignacionesInfra.Add(a);
+            return a;
+        }
+    }
+
+    public void RegistrarNotificacionInfra(long asignacionId, bool enviado, string? error)
+    {
+        lock (s.Sync)
+        {
+            var i = s.AsignacionesInfra.FindIndex(a => a.AsignacionId == asignacionId);
+            if (i >= 0) s.AsignacionesInfra[i] = s.AsignacionesInfra[i] with { Notificado = enviado, Error = error };
         }
     }
 
