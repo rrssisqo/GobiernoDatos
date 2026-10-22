@@ -1,0 +1,134 @@
+@page
+@model GobiernoDatos.Web.Pages.Auditoria.RespuestasModel
+@{
+    ViewData["Title"] = "Auditoría · Evidencia de la respuesta";
+    ViewData["Nav"] = "auditoria";
+    var todos = Model.Evento == 0;
+    var tot = (Total: Model.Resumen.Sum(r => r.Total), Ok: Model.Resumen.Sum(r => r.Ok), Baja: Model.Resumen.Sum(r => r.Baja), Pend: Model.Resumen.Sum(r => r.Pendientes));
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Auditoría</h1>
+        <p>Respuesta de cada macro área: OKBAJA (OK = continúa, BAJA) y COMENTARIOS que capturó el responsable, con quién respondió y cuándo</p>
+    </div>
+    <div class="acciones">
+        <a class="btn btn-primario" id="btn-exportar-respuestas" asp-page-handler="Exportar" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
+           asp-route-respuesta="@Model.Respuesta" asp-route-q="@Model.Q">Exportar a Excel</a>
+    </div>
+</header>
+
+<partial name="_Pestanas" model="@("Respuestas")" />
+
+<section class="panel" aria-labelledby="h-resumen">
+    <div class="panel-cab">
+        <h2 id="h-resumen">Por macro área</h2>
+        <span class="sutil">@tot.Ok.ToString("N0") OK · @tot.Baja.ToString("N0") BAJA · @tot.Pend.ToString("N0") sin respuesta de @tot.Total.ToString("N0") accesos</span>
+    </div>
+    <div class="tabla-scroll">
+        <table class="tabla" id="tabla-resumen-respuestas">
+            <thead><tr><th>AREARESPONSABLE</th><th class="derecha">Accesos</th><th class="derecha">OK</th><th class="derecha">BAJA</th><th class="derecha">Sin respuesta</th><th>Avance</th></tr></thead>
+            <tbody>
+                @foreach (var r in Model.Resumen)
+                {
+                    var avance = r.Total == 0 ? 0 : (r.Ok + r.Baja) * 100m / r.Total;
+                    <tr data-macro="@r.MacroArea">
+                        <td><a asp-route-evento="@Model.Evento" asp-route-macro="@r.MacroArea">@r.MacroArea</a></td>
+                        <td class="num">@r.Total.ToString("N0")</td>
+                        <td class="num">@r.Ok.ToString("N0")</td>
+                        <td class="num">@r.Baja.ToString("N0")</td>
+                        <td class="num">@r.Pendientes.ToString("N0")</td>
+                        <td><div class="avance"><span class="mono">@avance.ToString("0")%</span><div class="barra"><span style="width:@avance.ToString("0")%"></span></div></div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel" aria-label="Respuestas por acceso">
+    <form method="get" class="panel-cuerpo form-fila" id="form-filtros-respuestas">
+        <label class="campo">Evento
+            <select name="evento" data-autosubmit>
+                <option value="0" selected="@(Model.Evento == 0)">Todos los eventos</option>
+                @foreach (var e in Model.Eventos)
+                {
+                    <option value="@e.EventoId" selected="@(e.EventoId == Model.Evento)">@e.Nombre · @ReglasRecertificacion.Etiqueta(e.Estatus)</option>
+                }
+            </select>
+        </label>
+        <label class="campo">AREARESPONSABLE
+            <select name="macro" data-autosubmit>
+                <option value="">Todas</option>
+                @foreach (var m in Model.MacroAreas) { <option value="@m" selected="@(m == Model.Macro)">@m</option> }
+            </select>
+        </label>
+        <label class="campo">OKBAJA
+            <select name="respuesta" data-autosubmit>
+                <option value="">Todas</option>
+                <option value="OK" selected="@(Model.Respuesta == "OK")">OK</option>
+                <option value="BAJA" selected="@(Model.Respuesta == "BAJA")">BAJA</option>
+                <option value="PENDIENTE" selected="@(Model.Respuesta == "PENDIENTE")">Sin respuesta</option>
+            </select>
+        </label>
+        <label class="campo" style="flex:2 1 240px">Buscar
+            <input type="search" name="q" value="@Model.Q" placeholder="Usuario, nombre, rol, vista, comentario…" />
+        </label>
+        <button type="submit" class="btn" style="flex:0 0 auto">Filtrar</button>
+    </form>
+
+    @if (Model.Filas.Count == 0)
+    {
+        <div class="vacio">No hay accesos con estos filtros.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla tabla-auditoria" id="tabla-respuestas">
+                <thead>
+                    <tr>
+                        @if (todos) { <th>EVENTO</th> }
+                        <th>AREARESPONSABLE</th><th>USUARIO</th><th>NAME</th><th>ROL</th><th>VISTA</th><th>OKBAJA</th><th>COMENTARIOS</th><th>RESPONDIÓ</th><th>FECHA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in Model.PaginaActual)
+                    {
+                        var ok = GobiernoDatos.Web.Pages.Auditoria.RespuestasModel.OkBaja(f.OkBaja);
+                        <tr>
+                            @if (todos) { <td>@f.Evento</td> }
+                            <td>@f.AreaResponsable</td>
+                            <td class="mono">@f.Usuario</td>
+                            <td>@f.Name</td>
+                            <td class="mono">@f.Rol</td>
+                            <td class="mono">@f.Vista</td>
+                            <td>@if (ok is not null) { <span class="badge @(ok == "OK" ? "badge-ok" : "badge-error")">@ok</span> } else { <span class="sutil">—</span> }</td>
+                            <td class="comentario">@f.Comentarios</td>
+                            <td>@f.DecididoPor</td>
+                            <td class="mono">@(f.FechaDecision?.ToString("yyyy-MM-dd HH:mm") ?? "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="panel-pie">
+        <span>
+            @if (Model.Filas.Count > 0)
+            {
+                @($"{(Model.Pagina - 1) * GobiernoDatos.Web.Pages.Auditoria.RespuestasModel.TamanoPagina + 1:N0}–{Math.Min(Model.Pagina * GobiernoDatos.Web.Pages.Auditoria.RespuestasModel.TamanoPagina, Model.Filas.Count):N0} de {Model.Filas.Count:N0} accesos")
+            }
+        </span>
+        @if (Model.Paginas > 1)
+        {
+            <nav class="paginacion" aria-label="Páginas">
+                <a class="btn btn-chico" aria-disabled="@(Model.Pagina == 1 ? "true" : "false")" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
+                   asp-route-respuesta="@Model.Respuesta" asp-route-q="@Model.Q" asp-route-pagina="@(Model.Pagina - 1)">Anterior</a>
+                <span class="mono">Página @Model.Pagina de @Model.Paginas</span>
+                <a class="btn btn-chico" aria-disabled="@(Model.Pagina == Model.Paginas ? "true" : "false")" asp-route-evento="@Model.Evento" asp-route-macro="@Model.Macro"
+                   asp-route-respuesta="@Model.Respuesta" asp-route-q="@Model.Q" asp-route-pagina="@(Model.Pagina + 1)">Siguiente</a>
+            </nav>
+        }
+    </div>
+</section>

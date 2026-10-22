@@ -1,0 +1,7 @@
+@model string
+@* Pestañas de Auditoría; el modelo es la página actual: Index, Respuestas o Notificaciones. *@
+<nav class="chips pestanas" aria-label="Vistas de auditoría">
+    <a class="chip" asp-page="Index" aria-current="@(Model == "Index" ? "page" : null)">Accesos</a>
+    <a class="chip" asp-page="Respuestas" aria-current="@(Model == "Respuestas" ? "page" : null)">Evidencia de la respuesta</a>
+    <a class="chip" asp-page="Notificaciones" aria-current="@(Model == "Notificaciones" ? "page" : null)">Notificaciones a responsables</a>
+</nav>

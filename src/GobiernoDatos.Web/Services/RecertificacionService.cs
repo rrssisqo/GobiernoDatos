@@ -65,7 +65,8 @@ public sealed record TableroBajas(RecertEvento Evento, IReadOnlyList<FilaBaja> F
 public sealed record FilaAuditoria(long AccesoId, int EventoId, string Evento,
                                    string? Area, string? Content, string Rol, string Vista, string Usuario, string Name,
                                    string? Gobierno, string AreaResponsable, string? Responsable,
-                                   Decision? OkBaja, string? Comentarios, int Accesos);
+                                   Decision? OkBaja, string? Comentarios, int Accesos,
+                                   string? DecididoPor = null, DateTime? FechaDecision = null);
 
 // Pendientes de un evento abierto por certificador vigente y macro área (gd.vw_recert_pendientes_certificador).
 // Correo = el registrado en gd.responsable; si es nulo se busca en Active Directory con el usuario de red.
@@ -443,7 +444,7 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
                     s.Vistas.First(v => v.VistaId == a.VistaId).RutaTecnica, a.UsuarioCodigo,
                     s.UsuariosHana.First(u => u.Codigo == a.UsuarioCodigo).Nombre, a.Gobierno,
                     s.MacroAreas.First(m => m.MacroAreaId == a.MacroAreaId).Nombre, a.Responsable,
-                    x.Decision?.Decision, x.Decision?.Comentario, a.Accesos3m);
+                    x.Decision?.Decision, x.Decision?.Comentario, a.Accesos3m, x.Decision?.DecididoPor, x.Decision?.FechaRegistro);
             }))
             .OrderByDescending(f => f.EventoId).ThenBy(f => f.AreaResponsable).ThenBy(f => f.Vista).ThenBy(f => f.Usuario).ToList();
     }

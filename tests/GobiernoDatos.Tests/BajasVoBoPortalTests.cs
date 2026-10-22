@@ -40,6 +40,25 @@ public class BajasVoBoPortalTests(PortalTests.Fabrica fabrica) : IClassFixture<P
         recert.Decidir(baja.AccesoId, Decision.BAJA, "Ya no lo usa", "demo");
         recert.ContinuaMasivo(mi.Accesos.Where(a => a.MacroArea == "TI").Select(a => a.AccesoId), "demo");
 
+        // Auditoría → Evidencia de la respuesta: OKBAJA y comentarios de TI, y exportación a Excel con el resumen.
+        var resp = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria/Respuestas?macro=TI"));
+        Assert.Matches(@"<a class=""chip""[^>]*aria-current=""page""[^>]*>Evidencia de la respuesta</a>", resp);
+        var filasResp = Regex.Matches(Regex.Match(resp, "<table class=\"tabla tabla-auditoria\" id=\"tabla-respuestas\">.*?</table>", RegexOptions.Singleline).Value,
+                                      "<tr>.*?</tr>", RegexOptions.Singleline).Select(m => m.Value).Skip(1).ToList();
+        Assert.Contains(filasResp, f => f.Contains(baja.UsuarioCodigo) && f.Contains(">BAJA<") && f.Contains("Ya no lo usa"));
+        Assert.Contains(filasResp, f => f.Contains(">OK<"));
+        Assert.All(filasResp, f => Assert.Contains("<td>TI</td>", f));
+        var soloBajas = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria/Respuestas?macro=TI&respuesta=BAJA"));
+        Assert.DoesNotContain(">OK<", Regex.Match(soloBajas, "id=\"tabla-respuestas\">.*?</table>", RegexOptions.Singleline).Value);
+        var xlsx = await client.GetAsync("/Auditoria/Respuestas?handler=Exportar&macro=TI");
+        using (var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(await xlsx.Content.ReadAsByteArrayAsync())))
+        {
+            var hoja = libro.Worksheet("Respuestas");
+            Assert.Equal("OKBAJA", hoja.Cell(1, 7).GetString());
+            Assert.Contains(hoja.RowsUsed(), r => r.Cell(3).GetString() == baja.UsuarioCodigo && r.Cell(7).GetString() == "BAJA" && r.Cell(8).GetString() == "Ya no lo usa");
+            Assert.Equal("TI", libro.Worksheet("Resumen por macro área").Cell(2, 1).GetString());
+        }
+
         // Un solo gerente para todas las macro áreas, desde Macro áreas.
         var macros = await client.GetStringAsync("/Recertificacion/MacroAreas");
         var panel = Regex.Match(macros, "<section[^>]*id=\"gerente\".*?</section>", RegexOptions.Singleline).Value;

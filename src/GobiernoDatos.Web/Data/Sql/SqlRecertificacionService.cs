@@ -442,20 +442,20 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
 
     private sealed record AuditoriaRow(long acceso_id, int evento_id, string evento, string? area, string? content, string rol, string vista,
                                        string usuario, string nombre_usuario, string? gobierno, string macro_area, string? responsable,
-                                       string decision, string? comentario, int accesos_3m);
+                                       string decision, string? comentario, int accesos_3m, string? decidido_por, DateTime? fecha_decision);
 
     public IReadOnlyList<FilaAuditoria> Auditoria(int? eventoId)
     {
         using var c = db.Abrir();
         return c.Query<AuditoriaRow>("""
             SELECT acceso_id, evento_id, evento, area, content, rol, vista, usuario, nombre_usuario, gobierno, macro_area, responsable,
-                   decision, comentario, accesos_3m
+                   decision, comentario, accesos_3m, decidido_por, fecha_decision
             FROM gd.vw_recert_evidencia
             WHERE @eventoId IS NULL OR evento_id = @eventoId
             ORDER BY evento_id DESC, macro_area, vista, usuario
             """, new { eventoId })
             .Select(f => new FilaAuditoria(f.acceso_id, f.evento_id, f.evento, f.area, f.content, f.rol, f.vista, f.usuario, f.nombre_usuario,
-                f.gobierno, f.macro_area, f.responsable, Decisión(f.decision), f.comentario, f.accesos_3m)).ToList();
+                f.gobierno, f.macro_area, f.responsable, Decisión(f.decision), f.comentario, f.accesos_3m, f.decidido_por, f.fecha_decision)).ToList();
     }
 
     // ---- Recordatorios ----

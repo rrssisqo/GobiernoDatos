@@ -299,3 +299,6 @@ section[id] { scroll-margin-top: 16px; }
 .bitacora .grupos-vista { display: flex; flex-direction: column; gap: 12px; }
 .bitacora .grupo-vista { border-left: 3px solid var(--borde); padding-left: 12px; }
 .bitacora .nombre-vista { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+
+/* Auditoría · Evidencia de la respuesta: el comentario puede ser largo. */
+.tabla-auditoria td.comentario { white-space: normal; min-width: 220px; }
