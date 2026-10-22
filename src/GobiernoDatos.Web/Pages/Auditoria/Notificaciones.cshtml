@@ -9,13 +9,13 @@
 <header class="encabezado">
     <div class="titulo">
         <h1>Auditoría</h1>
-        <p>Solicitud de validación a los responsables de cada macro área: a quién se notificó y el correo enviado</p>
+        <p>Solicitud de validación a los responsables de cada macro área y VoBo del gerente: a quién se notificó y la evidencia</p>
     </div>
     <div class="acciones">
         @if (Model.Evento is not null)
         {
             <a class="btn btn-primario" asp-page-handler="Evidencia" asp-route-evento="@Model.Evento"
-               title="Un .zip con el resumen en Excel y todos los correos enviados (.eml)">Descargar evidencia</a>
+               title="Un .zip con el resumen en Excel, los correos enviados (.eml) y las constancias de VoBo del gerente">Descargar evidencia</a>
         }
     </div>
 </header>
@@ -48,7 +48,7 @@
         <div class="panel-cuerpo"><span class="sutil">@notificadas de @Model.PorMacro.Count macro áreas notificadas</span></div>
         <div class="tabla-scroll">
             <table class="tabla" id="tabla-notificacion-macro">
-                <thead><tr><th>Macro área</th><th>Responsables</th><th>Notificado</th><th class="derecha">Envíos</th><th>Último envío</th><th>Correo</th><th class="derecha">Pendientes</th><th>Certificación</th></tr></thead>
+                <thead><tr><th>Macro área</th><th>Responsables</th><th>Notificado</th><th class="derecha">Envíos</th><th>Último envío</th><th>Correo</th><th class="derecha">Pendientes</th><th>Certificación</th><th>VoBo gerente</th></tr></thead>
                 <tbody>
                     @foreach (var m in Model.PorMacro)
                     {
@@ -65,6 +65,49 @@
                                 else if (u is not null) { <span class="ayuda">Enviado antes de guardar el correo</span> }</td>
                             <td class="num">@m.Pendientes</td>
                             <td>@if (m.Confirmada) { <span class="badge badge-ok">Confirmada</span> } else { <span class="sutil">—</span> }</td>
+                            <td>@if (m.VoBo is { } vb)
+                                {
+                                    <span class="badge @(vb.Estatus == EstatusVoBo.AUTORIZADA ? "badge-ok" : vb.Estatus == EstatusVoBo.RECHAZADA ? "badge-error" : "badge-aviso")">@NotificacionesModel.Etiqueta(vb.Estatus)</span>
+                                    <a asp-page-handler="VoBo" asp-route-id="@vb.VoBoId" asp-route-evento="@Model.Evento" style="display:block">Descargar constancia</a>
+                                }
+                                else { <span class="sutil">—</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="panel" aria-labelledby="h-vobo" id="vobo-gerente">
+    <div class="panel-cab">
+        <h2 id="h-vobo">VoBo del gerente</h2>
+        <span class="sutil">Solicitudes enviadas por Power Automate al gerente y su respuesta; la constancia incluye las bajas que se pidió autorizar</span>
+    </div>
+    @if (Model.VoBos.Count == 0)
+    {
+        <div class="vacio">No se ha solicitado el VoBo del gerente en este evento.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-vobo-gerente">
+                <thead><tr><th>Macro área</th><th>Gerente</th><th class="derecha">Bajas</th><th>Solicitud</th><th>Envío</th><th>Respuesta</th><th>Evidencia</th></tr></thead>
+                <tbody>
+                    @foreach (var v in Model.VoBos)
+                    {
+                        <tr data-vobo="@v.VoBoId">
+                            <td>@v.MacroArea</td>
+                            <td>@v.GerenteNombre<span class="secundario">@v.GerenteCorreo</span></td>
+                            <td class="num">@v.Bajas</td>
+                            <td><span class="mono">@v.FechaSolicitud.ToString("yyyy-MM-dd HH:mm")</span><span class="secundario">@v.SolicitadoPor</span></td>
+                            <td class="mono">@(v.FechaEnvio?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                            <td>
+                                <span class="badge @(v.Estatus == EstatusVoBo.AUTORIZADA ? "badge-ok" : v.Estatus == EstatusVoBo.RECHAZADA ? "badge-error" : "badge-aviso")">@NotificacionesModel.Etiqueta(v.Estatus)</span>
+                                @if (v.FechaRespuesta is { } fr) { <span class="secundario">@v.RespondidoPor · @fr.ToString("yyyy-MM-dd HH:mm")@(v.Comentario is null ? "" : " · " + v.Comentario)</span> }
+                                @if (v.MotivoCancelacion is not null) { <span class="secundario">@v.MotivoCancelacion</span> }
+                            </td>
+                            <td><a asp-page-handler="VoBo" asp-route-id="@v.VoBoId" asp-route-evento="@Model.Evento">Descargar constancia (.xlsx)</a></td>
                         </tr>
                     }
                 </tbody>

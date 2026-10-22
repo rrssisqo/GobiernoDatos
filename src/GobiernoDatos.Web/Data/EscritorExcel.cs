@@ -2,12 +2,24 @@ using ClosedXML.Excel;
 
 namespace GobiernoDatos.Web.Data;
 
-// Libros .xlsx de una sola hoja: encabezado congelado con filtro, fechas y números con su tipo de Excel.
+// Libros .xlsx (una o varias hojas): encabezado congelado con filtro, fechas y números con su tipo de Excel.
 public static class EscritorExcel
 {
-    public static byte[] Libro(string hoja, IEnumerable<string> encabezados, IEnumerable<IEnumerable<object?>> filas)
+    public static byte[] Libro(string hoja, IEnumerable<string> encabezados, IEnumerable<IEnumerable<object?>> filas) =>
+        Libro([(hoja, encabezados, filas)]);
+
+    // Varias hojas en un mismo libro, cada una con su encabezado.
+    public static byte[] Libro(IEnumerable<(string Hoja, IEnumerable<string> Encabezados, IEnumerable<IEnumerable<object?>> Filas)> hojas)
     {
         using var libro = new XLWorkbook();
+        foreach (var (hoja, encabezados, filas) in hojas) Hoja(libro, hoja, encabezados, filas);
+        using var ms = new MemoryStream();
+        libro.SaveAs(ms);
+        return ms.ToArray();
+    }
+
+    private static void Hoja(XLWorkbook libro, string hoja, IEnumerable<string> encabezados, IEnumerable<IEnumerable<object?>> filas)
+    {
         var h = libro.AddWorksheet(NombreHoja(hoja));
         var enc = encabezados.ToList();
         for (int c = 0; c < enc.Count; c++) h.Cell(1, c + 1).Value = enc[c];
@@ -44,10 +56,6 @@ public static class EscritorExcel
         h.SheetView.FreezeRows(1);
         h.Columns(1, enc.Count).AdjustToContents(1, Math.Min(r, 300));   // ancho según las primeras filas: rápido con miles
         foreach (var col in h.Columns(1, enc.Count)) if (col.Width > 60) col.Width = 60;
-
-        using var ms = new MemoryStream();
-        libro.SaveAs(ms);
-        return ms.ToArray();
     }
 
     // Excel limita el nombre de la hoja a 31 caracteres y no admite : \ / ? * [ ]

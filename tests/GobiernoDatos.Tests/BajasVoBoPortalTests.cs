@@ -56,6 +56,20 @@ public class BajasVoBoPortalTests(PortalTests.Fabrica fabrica) : IClassFixture<P
         Assert.True(recert.ResponderVoBo(id, true, "gerenteti@ejemplo.local", "Autorizado"));
         html = await client.GetStringAsync("/Recertificacion/Bajas?macro=TI");
         Assert.Contains("Autorizado", WebUtility.HtmlDecode(Regex.Match(html, "<tr data-macro=\"TI\">.*?</tr>", RegexOptions.Singleline).Value));
+
+        // Evidencia en Auditoría → Notificaciones: el VoBo con su constancia (solicitud, respuesta y bajas).
+        var notif = WebUtility.HtmlDecode(await client.GetStringAsync("/Auditoria/Notificaciones"));
+        var filaVobo = Regex.Match(notif, $"<tr data-vobo=\"{id}\">.*?</tr>", RegexOptions.Singleline).Value;
+        Assert.Contains("Autorizado", filaVobo);
+        Assert.Contains("gerenteti@ejemplo.local", filaVobo);
+        var constancia = await client.GetAsync(Regex.Match(filaVobo, "href=\"([^\"]*handler=VoBo[^\"]*)\"").Groups[1].Value);
+        using (var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(await constancia.Content.ReadAsByteArrayAsync())))
+        {
+            var datos = libro.Worksheet("VoBo");
+            Assert.Contains(datos.RowsUsed(), r => r.Cell(1).GetString() == "Estatus" && r.Cell(2).GetString() == "Autorizado");
+            Assert.Contains(datos.RowsUsed(), r => r.Cell(1).GetString() == "Respondió" && r.Cell(2).GetString() == "gerenteti@ejemplo.local");
+            Assert.Equal((baja.UsuarioCodigo, baja.Rol), (libro.Worksheet("Bajas").Cell(2, 1).GetString(), libro.Worksheet("Bajas").Cell(2, 3).GetString()));
+        }
         Assert.Contains("Por asignar a infraestructura", WebUtility.HtmlDecode(html));
         Assert.DoesNotContain("handler=Ejecutar", html);
 

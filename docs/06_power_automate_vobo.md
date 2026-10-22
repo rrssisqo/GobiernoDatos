@@ -27,7 +27,7 @@ Solo hay una solicitud activa (`PENDIENTE`, `ENVIADA` o `AUTORIZADA`) por evento
 | Objeto | Para qué |
 |---|---|
 | `gd.vw_recert_vobo_por_enviar` | Solicitudes por enviar. Columnas: `vobo_id`, `evento`, `macro_area`, `gerente_nombre`, `gerente_correo`, `bajas`, `solicitado_por`, `fecha_solicitud`. |
-| `gd.vw_recert_vobo_detalle` | Bajas de cada solicitud (filtrar por `vobo_id`): `usuario`, `nombre_usuario`, `vista`, `rol`, `comentario`, `decidido_por`, `fecha_decision`. |
+| `gd.vw_recert_vobo_detalle` | Bajas de cada solicitud (filtrar por `vobo_id`): `usuario`, `nombre_usuario`, `vista`, `rol`, `comentario`, `decidido_por`, `fecha_decision`. Lee la copia que se guarda al crear la solicitud (`gd.recert_vobo_baja`, migración 018): es exactamente lo que el gerente autoriza y queda como evidencia en Auditoría → Notificaciones. |
 | `EXEC gd.sp_vobo_marcar_enviada @vobo_id` | Marca la solicitud como enviada para que no se envíe dos veces. Devuelve `actualizada` (1/0). |
 | `EXEC gd.sp_vobo_responder @vobo_id, @autorizada, @respondido_por, @comentario` | Registra la respuesta. `@autorizada` = 1 o 0; `@respondido_por` = correo de quien respondió. Devuelve `registrada` y `mensaje`. |
 

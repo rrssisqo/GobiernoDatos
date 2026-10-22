@@ -38,7 +38,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/012_recert_gerente_unico.sql", "db/migrations/013_recert_anular_ticket.sql",
                                         "db/migrations/014_recert_asignacion_infra.sql", "db/migrations/015_recert_responsable_infra_unico.sql",
                                         "db/migrations/016_recert_recordatorio_correo.sql",
-                                        "db/migrations/017_regla_campos_frecuencia.sql",
+                                        "db/migrations/017_regla_campos_frecuencia.sql", "db/migrations/018_recert_vobo_evidencia.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -308,6 +308,13 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.True(recert.ResponderVoBo(nuevo.VoBoId, true, "gerente@mabe.com.mx", "De acuerdo"));
         Assert.True(Ti().Autorizada);
         Assert.Throws<DomainException>(() => recert.SolicitarVoBo(evento.EventoId, ti.MacroAreaId, "admin"));   // ya autorizado
+
+        // Evidencia: todas las solicitudes (la cancelada y la autorizada) con la copia de sus bajas.
+        var vobos = recert.VoBos(evento.EventoId);
+        Assert.Equal([EstatusVoBo.AUTORIZADA, EstatusVoBo.CANCELADA], vobos.Select(v => v.Estatus));
+        Assert.All(vobos, v => Assert.Equal("TI", v.MacroArea));
+        Assert.Equal(baja.AccesoId, Assert.Single(recert.BajasVoBo(nuevo.VoBoId)).AccesoId);
+        Assert.Single(recert.BajasVoBo(vobo.VoBoId));                                           // la cancelada conserva su copia
 
         // Asignación a infraestructura con número de cambio y el resultado del aviso.
         Assert.Throws<DomainException>(() => recert.AsignarInfraestructura(evento.EventoId, ti.MacroAreaId, "CHG-001", "admin"));   // sin responsable

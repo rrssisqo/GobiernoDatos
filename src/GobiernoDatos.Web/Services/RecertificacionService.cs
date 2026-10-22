@@ -37,7 +37,12 @@ public sealed record GerenteVoBo(string UsuarioRed, string Nombre, string Correo
 
 public sealed record VoBoGerente(long VoBoId, int EventoId, int MacroAreaId, string GerenteNombre, string GerenteCorreo, int Bajas,
                                  EstatusVoBo Estatus, string SolicitadoPor, DateTime FechaSolicitud, DateTime? FechaEnvio,
-                                 DateTime? FechaRespuesta, string? RespondidoPor, string? Comentario, string? MotivoCancelacion);
+                                 DateTime? FechaRespuesta, string? RespondidoPor, string? Comentario, string? MotivoCancelacion,
+                                 string MacroArea = "");
+
+// Baja incluida en una solicitud de VoBo, copiada al solicitarla (gd.recert_vobo_baja, migración 018).
+public sealed record BajaVoBo(long AccesoId, string Usuario, string Nombre, string Rol, string Vista, string? Comentario,
+                              string? DecididoPor, DateTime? FechaDecision);
 
 // Asignación de las bajas de una macro área a un responsable de infraestructura con número de cambio (migración 014).
 public sealed record AsignacionInfra(long AsignacionId, int EventoId, int MacroAreaId, string ResponsableUsuarioRed, string ResponsableNombre,
@@ -112,6 +117,9 @@ public interface IRecertificacionService
     long SolicitarVoBo(int eventoId, int macroAreaId, string usuario);
     // Respuesta del gerente (en producción la registra Power Automate con gd.sp_vobo_responder). Devuelve si se registró.
     bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario);
+    // Evidencia: todas las solicitudes de VoBo del evento (también canceladas y rechazadas) y las bajas de cada una.
+    IReadOnlyList<VoBoGerente> VoBos(int eventoId);
+    IReadOnlyList<BajaVoBo> BajasVoBo(long voboId);
     // Responsable de infraestructura único: retira los roles de todas las macro áreas (migración 015). Mismo modelo que el gerente.
     GerenteVoBo? ResponsableInfra();
     void AsignarResponsableInfra(string usuarioRed, string usuario);
@@ -547,6 +555,10 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             var vobo = new VoBoGerente(s.NuevoId(), eventoId, macroAreaId, g.Nombre, g.Correo, conteo.Baja, EstatusVoBo.PENDIENTE,
                                        usuario, s.Ahora, null, null, null, null, null);
             s.VoBos.Add(vobo);
+            s.VoBoBajas[vobo.VoBoId] = Vigentes(eventoId).Where(x => x.Acceso.MacroAreaId == macroAreaId && x.Decision?.Decision == Decision.BAJA)
+                .Select(x => new BajaVoBo(x.Acceso.AccesoId, x.Acceso.UsuarioCodigo, s.UsuariosHana.First(u => u.Codigo == x.Acceso.UsuarioCodigo).Nombre,
+                    x.Acceso.Rol, s.Vistas.First(v => v.VistaId == x.Acceso.VistaId).RutaTecnica, x.Decision!.Comentario, x.Decision.DecididoPor,
+                    x.Decision.FechaRegistro)).ToList();
             return vobo.VoBoId;
         }
     }
@@ -613,6 +625,19 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             var i = s.AsignacionesInfra.FindIndex(a => a.AsignacionId == asignacionId);
             if (i >= 0) s.AsignacionesInfra[i] = s.AsignacionesInfra[i] with { Notificado = enviado, Error = error };
         }
+    }
+
+    public IReadOnlyList<VoBoGerente> VoBos(int eventoId)
+    {
+        lock (s.Sync)
+            return s.VoBos.Where(v => v.EventoId == eventoId)
+                .Select(v => v with { MacroArea = s.MacroAreas.First(m => m.MacroAreaId == v.MacroAreaId).Nombre })
+                .OrderBy(v => v.MacroArea).ThenByDescending(v => v.VoBoId).ToList();
+    }
+
+    public IReadOnlyList<BajaVoBo> BajasVoBo(long voboId)
+    {
+        lock (s.Sync) return s.VoBoBajas.GetValueOrDefault(voboId) ?? [];
     }
 
     private bool VoBoActivo(int eventoId, int macroAreaId) =>

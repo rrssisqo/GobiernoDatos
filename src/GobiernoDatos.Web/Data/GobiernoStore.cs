@@ -40,6 +40,7 @@ public sealed class GobiernoStore(TimeProvider reloj)
     public Services.GerenteVoBo? GerenteVoBo { get; set; }
     public Services.GerenteVoBo? ResponsableInfra { get; set; }
     public List<Services.VoBoGerente> VoBos { get; } = [];
+    public Dictionary<long, List<Services.BajaVoBo>> VoBoBajas { get; } = [];
     public List<Services.AsignacionInfra> AsignacionesInfra { get; } = [];
     public List<VistaUso> Usos { get; } = [];
 

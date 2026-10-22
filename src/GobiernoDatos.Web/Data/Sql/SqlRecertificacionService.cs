@@ -652,6 +652,33 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
                   new { asignacionId, enviado, error });
     }
 
+    public IReadOnlyList<VoBoGerente> VoBos(int eventoId)
+    {
+        using var c = db.Abrir();
+        return c.Query<VoBoRow, string, VoBoGerente>("""
+            SELECT v.vobo_id, v.evento_id, v.macro_area_id, v.gerente_nombre, v.gerente_correo, v.bajas, v.estatus, v.solicitado_por,
+                   v.fecha_solicitud, v.fecha_envio, v.fecha_respuesta, v.respondido_por, v.comentario_respuesta, v.motivo_cancelacion,
+                   m.nombre AS macro_area
+            FROM gd.recert_vobo AS v JOIN gd.macro_area AS m ON m.macro_area_id = v.macro_area_id
+            WHERE v.evento_id = @eventoId
+            ORDER BY m.nombre, v.vobo_id DESC
+            """, (v, macro) => VoBo(v) with { MacroArea = macro }, new { eventoId }, splitOn: "macro_area").ToList();
+    }
+
+    private sealed record BajaVoBoRow(long acceso_id, string usuario, string nombre_usuario, string rol, string vista, string? comentario,
+                                      string? decidido_por, DateTime? fecha_decision);
+
+    public IReadOnlyList<BajaVoBo> BajasVoBo(long voboId)
+    {
+        using var c = db.Abrir();
+        return c.Query<BajaVoBoRow>("""
+            SELECT acceso_id, usuario, nombre_usuario, rol, vista, comentario, decidido_por, fecha_decision
+            FROM gd.recert_vobo_baja WHERE vobo_id = @voboId ORDER BY nombre_usuario, rol
+            """, new { voboId })
+            .Select(b => new BajaVoBo(b.acceso_id, b.usuario, b.nombre_usuario, b.rol, b.vista, b.comentario, b.decidido_por, b.fecha_decision))
+            .ToList();
+    }
+
     public bool ResponderVoBo(long voboId, bool autorizada, string respondidoPor, string? comentario)
     {
         using var c = db.Abrir();
