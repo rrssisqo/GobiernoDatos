@@ -13,6 +13,7 @@
         <p>Catálogo de reglas: alta, cambio y baja · los resultados se cargan en Calidad</p>
     </div>
     <div class="acciones">
+        <a class="btn" href="#frecuencias">Frecuencias</a>
         <a class="btn btn-primario" asp-page="Editar">Nueva regla</a>
     </div>
 </header>
@@ -38,18 +39,20 @@
         <div class="tabla-scroll">
             <table class="tabla" id="tabla-reglas">
                 <thead>
-                    <tr><th>Código</th><th class="col-nombre">Descripción</th><th>Tipo</th><th>Gobierno</th><th>Dimensión</th><th>Objetos BW</th><th>Etapa</th><th><span class="oculto-visual">Acciones</span></th></tr>
+                    <tr><th>Código</th><th class="col-nombre">Descripción</th><th>Tipo</th><th>Gobierno</th><th>Dimensión</th><th>Frecuencia</th><th>Objetos BW</th><th>Producción</th><th>Etapa</th><th><span class="oculto-visual">Acciones</span></th></tr>
                 </thead>
                 <tbody>
                     @foreach (var r in Model.Filas)
                     {
-                        <tr data-texto="@r.Codigo @r.Descripcion @r.Tipo @r.Gobierno @string.Join(" ", r.Objetos) @r.Responsable">
+                        <tr data-texto="@r.Codigo @r.Descripcion @r.Tipo @r.Gobierno @string.Join(" ", r.Objetos) @string.Join(" ", r.Contactos)">
                             <td class="mono nowrap"><a asp-page="Editar" asp-route-id="@r.ReglaId">@r.Codigo</a></td>
-                            <td>@r.Descripcion @if (r.Responsable is not null) { <span class="ayuda" style="display:block">@r.Responsable</span> }</td>
+                            <td>@r.Descripcion @if (r.Contactos.Count > 0) { <span class="ayuda" style="display:block">Contacto: @string.Join(", ", r.Contactos)</span> }</td>
                             <td>@Ui.Texto(r.Tipo, "—")</td>
                             <td>@Ui.Texto(r.Gobierno, "—")</td>
                             <td>@(r.Dimension is null ? "—" : DefinicionRegla.Etiqueta(r.Dimension))</td>
+                            <td>@Ui.Texto(r.Frecuencia, "—")@if (r.Hora is { } h) { <span class="secundario mono">@h.ToString("HH:mm")</span> }</td>
                             <td class="mono">@string.Join(", ", r.Objetos)</td>
+                            <td class="mono">@(r.FechaProduccion?.ToString("yyyy-MM-dd") ?? "—")</td>
                             <td>
                                 @if (!r.Activa) { <span class="badge badge-error">Baja</span> }
                                 else { <span class="badge @(r.Etapa == "Operación PRD" ? "badge-ok" : "badge-neutro")">@Ui.Texto(r.Etapa, "Sin etapa")</span> }
@@ -77,6 +80,28 @@
         </div>
     }
     <div class="panel-pie"><span>La baja es lógica: la regla deja de estar activa y conserva su historial de resultados de calidad.</span></div>
+</section>
+
+<section class="panel" aria-labelledby="h-frecuencias" id="frecuencias">
+    <div class="panel-cab">
+        <h2 id="h-frecuencias">Catálogo de frecuencias</h2>
+        <span class="sutil">Opciones de «Frecuencia» al dar de alta o cambiar una regla; solo se elimina si ninguna regla la usa.</span>
+    </div>
+    <div class="panel-cuerpo">
+        <div class="chips">
+            @foreach (var fr in Model.Frecuencias)
+            {
+                <form method="post" asp-page-handler="EliminarFrecuencia" asp-route-estado="@Model.Estado" class="inline" data-confirmar="¿Eliminar la frecuencia «@fr» del catálogo?">
+                    <input type="hidden" name="nombre" value="@fr" />
+                    <span class="chip">@fr <button type="submit" title="Eliminar" style="border:0;background:none;cursor:pointer;padding:0 0 0 4px;color:inherit">✕</button></span>
+                </form>
+            }
+        </div>
+        <form method="post" asp-page-handler="CrearFrecuencia" asp-route-estado="@Model.Estado" class="form-fila compacto" id="form-frecuencia" style="max-width:420px">
+            <input type="text" name="nombre" required maxlength="40" placeholder="Nueva frecuencia (ej. Quincenal)" aria-label="Nueva frecuencia" />
+            <button type="submit" class="btn btn-chico" style="flex:0 0 auto">Agregar</button>
+        </form>
+    </div>
 </section>
 
 <dialog id="dlg-baja" class="dialogo" aria-labelledby="h-baja">

@@ -5,13 +5,14 @@ namespace GobiernoDatos.Web.Services;
 
 // Renglón del catálogo de reglas (menú Reglas).
 public sealed record FilaRegla(int ReglaId, string Codigo, string Descripcion, string? Tipo, string? Gobierno, string? Dimension,
-                               string? Responsable, IReadOnlyList<string> Objetos, string? Etapa, bool Activa);
+                               IReadOnlyList<string> Contactos, IReadOnlyList<string> Objetos, string? Etapa, bool Activa,
+                               string? Frecuencia = null, TimeOnly? Hora = null, DateOnly? FechaProduccion = null);
 
 // Regla para el formulario de cambio: sus datos actuales y su estado.
 public sealed record ReglaEdicion(int ReglaId, bool Activa, DatosRegla Datos);
 
 // Listas para el formulario de alta y cambio.
-public sealed record CatalogosRegla(IReadOnlyList<string> Tipos, IReadOnlyList<string> Gobiernos, IReadOnlyList<string> Responsables,
+public sealed record CatalogosRegla(IReadOnlyList<string> Tipos, IReadOnlyList<string> Gobiernos, IReadOnlyList<string> Frecuencias,
                                     IReadOnlyList<string> Objetos);
 
 // ABC de reglas de calidad. La baja es lógica: la regla queda inactiva en la etapa "Baja" y conserva su historial de resultados.
@@ -27,6 +28,9 @@ public interface IReglasService
     void DarDeBaja(int reglaId, string motivo, string usuario);
     // Vuelve a la última etapa anterior a la baja.
     void Reactivar(int reglaId, string usuario);
+    // Catálogo de frecuencias (gd.frecuencia_regla): solo se elimina si ninguna regla la usa.
+    void CrearFrecuencia(string nombre);
+    void EliminarFrecuencia(string nombre);
 }
 
 public sealed class ReglasService(GobiernoStore s) : IReglasService
@@ -37,7 +41,7 @@ public sealed class ReglasService(GobiernoStore s) : IReglasService
     {
         lock (s.Sync)
             return s.Reglas.OrderBy(r => r.Codigo).Select(r => new FilaRegla(r.ReglaId, r.Codigo, r.Descripcion, r.TipoRegla, r.Gobierno,
-                r.DimensionDq, r.Responsable, r.Objetos.Select(Objeto).ToList(), r.Etapa, r.Activa)).ToList();
+                r.DimensionDq, [.. r.Contactos], r.Objetos.Select(Objeto).ToList(), r.Etapa, r.Activa, r.Frecuencia, r.Hora, r.FechaProduccion)).ToList();
     }
 
     public ReglaEdicion? Obtener(int reglaId)
@@ -48,8 +52,9 @@ public sealed class ReglasService(GobiernoStore s) : IReglasService
             if (r is null) return null;
             var etapa = DefinicionRegla.Etapas.FirstOrDefault(e => e.Nombre == r.Etapa)?.Orden ?? 1;
             return new ReglaEdicion(r.ReglaId, r.Activa, new DatosRegla(r.Codigo, r.TipoRegla, r.Descripcion, r.ReglaFuncional, r.PropositoNegocio,
-                r.DimensionDq, r.Gobierno, r.Responsable, r.CamposEvaluados, r.Objetos.Select(Objeto).ToList(), r.TablaStg, r.Mapping,
-                r.NoCsv, r.NombreCsv, r.Frecuencia, r.EscribeLog, r.CorreoAsunto, [.. r.Destinatarios], etapa, r.QueryValidacion));
+                r.DimensionDq, r.Gobierno, [.. r.Contactos], r.CamposEvaluados, r.Objetos.Select(Objeto).ToList(), r.TablaStg, r.Mapping,
+                r.NoCsv, r.NombreCsv, r.Frecuencia, r.EscribeLog, r.CorreoAsunto, [.. r.Destinatarios], etapa, r.QueryValidacion,
+                r.TaskFlow, r.Hora, r.FechaProduccion, r.Comentarios));
         }
     }
 
@@ -57,7 +62,7 @@ public sealed class ReglasService(GobiernoStore s) : IReglasService
     {
         lock (s.Sync)
             return new([.. s.Reglas.Select(r => r.TipoRegla).OfType<string>().Append("Nulos").Distinct().Order()],
-                       [.. s.Gobiernos.Order()], [.. s.Responsables.Order()], [.. s.Objetos.Select(o => o.Nombre).Order()]);
+                       [.. s.Gobiernos.Order()], [.. s.FrecuenciasRegla], [.. s.Objetos.Select(o => o.Nombre).Order()]);
     }
 
     public int Crear(DatosRegla datos, string usuario)
@@ -114,11 +119,13 @@ public sealed class ReglasService(GobiernoStore s) : IReglasService
         // El gobierno que ya tiene la regla se acepta aunque no esté en el catálogo.
         if (d.Gobierno is not null && d.Gobierno != regla.Gobierno && !s.Gobiernos.Contains(d.Gobierno))
             throw new DomainException("Selecciona un gobierno válido.");
-        s.AsegurarResponsable(d.Responsable);
+        var frecuencia = d.Frecuencia is null ? null
+            : s.FrecuenciasRegla.FirstOrDefault(f => f.Equals(d.Frecuencia, StringComparison.OrdinalIgnoreCase))
+              ?? throw new DomainException($"La frecuencia «{d.Frecuencia}» no está en el catálogo.");
         regla.TipoRegla = d.TipoRegla; regla.Descripcion = d.Descripcion; regla.ReglaFuncional = d.ReglaFuncional;
         regla.PropositoNegocio = d.PropositoNegocio; regla.DimensionDq = d.DimensionDq; regla.Gobierno = d.Gobierno;
-        regla.Responsable = d.Responsable; regla.CamposEvaluados = d.CamposEvaluados; regla.TablaStg = d.TablaStg; regla.Mapping = d.Mapping;
-        regla.NoCsv = d.NoCsv; regla.NombreCsv = d.NombreCsv; regla.Frecuencia = d.Frecuencia; regla.EscribeLog = d.EscribeLog;
+        regla.CamposEvaluados = d.CamposEvaluados; regla.TablaStg = d.TablaStg; regla.Mapping = d.Mapping;
+        regla.NoCsv = d.NoCsv; regla.NombreCsv = d.NombreCsv; regla.Frecuencia = frecuencia; regla.EscribeLog = d.EscribeLog;
         regla.CorreoAsunto = d.CorreoAsunto; regla.QueryValidacion = d.QueryValidacion; regla.Etapa = Etapa(d.EtapaOrden);
         regla.Objetos.Clear();
         foreach (var nombre in d.Objetos)
@@ -129,6 +136,38 @@ public sealed class ReglasService(GobiernoStore s) : IReglasService
         }
         regla.Destinatarios.Clear();
         regla.Destinatarios.AddRange(d.Destinatarios);
+        regla.Contactos.Clear();
+        regla.Contactos.AddRange(d.Contactos);
+        regla.TaskFlow = d.TaskFlow; regla.Hora = d.Hora; regla.FechaProduccion = d.FechaProduccion; regla.Comentarios = d.Comentarios;
+    }
+
+    public void CrearFrecuencia(string nombre)
+    {
+        nombre = Frecuencia(nombre);
+        lock (s.Sync)
+        {
+            if (s.FrecuenciasRegla.Contains(nombre, StringComparer.OrdinalIgnoreCase)) throw new DomainException($"La frecuencia «{nombre}» ya existe.");
+            s.FrecuenciasRegla.Add(nombre);
+        }
+    }
+
+    public void EliminarFrecuencia(string nombre)
+    {
+        lock (s.Sync)
+        {
+            if (s.Reglas.Any(r => string.Equals(r.Frecuencia, nombre, StringComparison.OrdinalIgnoreCase)))
+                throw new DomainException($"La frecuencia «{nombre}» la usan reglas; cámbialas antes de eliminarla.");
+            if (s.FrecuenciasRegla.RemoveAll(f => f.Equals(nombre, StringComparison.OrdinalIgnoreCase)) == 0)
+                throw new DomainException($"La frecuencia «{nombre}» no existe.");
+        }
+    }
+
+    internal static string Frecuencia(string? nombre)
+    {
+        var n = (nombre ?? "").Trim();
+        if (n.Length == 0) throw new DomainException("Indica el nombre de la frecuencia.");
+        if (n.Length > 40) throw new DomainException("La frecuencia admite máximo 40 caracteres.");
+        return n;
     }
 
     private Regla Regla(int reglaId) => s.Reglas.FirstOrDefault(x => x.ReglaId == reglaId) ?? throw new DomainException("La regla no existe.");

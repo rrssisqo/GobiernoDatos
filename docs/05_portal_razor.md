@@ -51,6 +51,16 @@ dotnet test                                      # 48 pruebas; sin la variable, 
 Abrir `GobiernoDatos.sln` en Visual Studio también funciona. Los cambios se pierden al reiniciar
 (almacén en memoria).
 
+## Migraciones de base de datos
+
+Los scripts de `db/migrations` están en UTF-8 y tienen textos con acentos (mensajes de error, catálogos). Se ejecutan **en orden** con:
+
+```
+sqlcmd -S SRVMABE385 -d GobiernoDatos -U <usuario> -P <contraseña> -C -I -b -f 65001 -i db\migrations\0NN_nombre.sql
+```
+
+`-f 65001` es obligatorio: sin él, `sqlcmd` lee el archivo como ANSI y los acentos quedan dañados en procedimientos y datos ("área" → "Ã¡rea"). `-I` activa QUOTED_IDENTIFIER (lo exigen los índices filtrados). Todas las migraciones se pueden volver a ejecutar sin efectos secundarios.
+
 ## Despliegue (IIS en SRVMABE602)
 
 El portal corre en `http://srvmabe602:8010/`. Archivos en `\\SRVMABE602\Aplicación web\GobiernoDatos`:
@@ -111,7 +121,7 @@ implementación de esas interfaces (p. ej. con Dapper) y se registra en `Program
 | `/Vistas` | Vistas gobernadas | Pestañas Todas / Nuevas / Fuera de recertificación, uso por vista, datos del extracto (lectura) y de gobierno (editables), mover de etapa con motivo en regresos, objetos BW |
 | `/Tareas` | Seguimiento tarea | Tareas de la etapa de cada vista asignadas a un usuario de red: data product, vista, usuario, etapa, asignación, estatus, días transcurridos (se congelan al cerrar) y check para marcarla terminada |
 | `/Calidad` | Calidad | Periodo y gobierno, KPIs, por gobierno, por regla y vista fuente, carga del resumen con rechazos; enlace al catálogo de reglas |
-| `/Reglas` | Reglas | ABC del catálogo de reglas: listado (activas, dadas de baja, todas; búsqueda), alta y cambio en `/Reglas/Editar` (el código no cambia), baja lógica con motivo (inactiva + etapa "Baja"; conserva su historial de resultados) y reactivación a la etapa anterior. Objetos BW y tipos nuevos se crean; destinatarios en `gd.regla_contacto`; cambios de etapa en `gd.mov_etapa_regla`. Validación en `Domain/DefinicionRegla.cs` |
+| `/Reglas` | Reglas | ABC del catálogo de reglas: listado (activas, dadas de baja, todas; búsqueda), alta y cambio en `/Reglas/Editar` (el código no cambia), baja lógica con motivo (inactiva + etapa "Baja"; conserva su historial de resultados) y reactivación a la etapa anterior. Objetos BW y tipos nuevos se crean; contactos y destinatarios (correos) en `gd.regla_contacto` (CONTACTO / DESTINATARIO; el contacto sustituye al responsable); task flow, hora de ejecución, fecha de producción y comentarios; frecuencia del catálogo `gd.frecuencia_regla`, que se administra en el mismo menú (migración 017); cambios de etapa en `gd.mov_etapa_regla`. Validación en `Domain/DefinicionRegla.cs` |
 | `/Recertificacion/Eventos` | Eventos | Carga del extracto → validación → abrir → cerrar, avance por macro área, historial |
 | `/Recertificacion/MacroAreas` | Macro áreas | Solo administradores. Gerente único que da el VoBo de las bajas y responsable de infraestructura único que las ejecuta, para todas las macro áreas (búsqueda en Entra ID; migraciones 012 y 015). ABC del catálogo GOBIERNO (extracto HANA) → macro área (`gd.recert_gobierno_macro_area`, migración 010); antes era una tabla fija dentro de la vista HANA. La carga del extracto toma la macro área de aquí (la columna Área Responsable solo si el gobierno no está); un gobierno sin macro área se rechaza. El RESPONSABLE del extracto ya no se usa: los certificadores se administran en Eventos |
 | `/Recertificacion/Mi` | Mi recertificación | Accesos de las macro áreas del certificador, Continúa/Baja al momento, comentario obligatorio en Baja, acción masiva, confirmación |

@@ -141,12 +141,21 @@
                     {
                         <div class="semana">
                             <span class="etq-semana">@g.Key.Etiqueta</span>
-                            <div>
-                                @foreach (var e in g)
+                            <div class="grupos-vista">
+                                @* Primero lo del data product (notas, avances de rubros DP) y después un bloque por vista. *@
+                                @foreach (var v in g.GroupBy(e => e.Vista).OrderBy(v => v.Key is not null).ThenBy(v => v.Key))
                                 {
-                                    <div class="entrada">
-                                        <span>@e.Detalle</span>
-                                        <span class="det">@e.Tipo · @Ui.Fecha(e.Fecha)@(string.IsNullOrEmpty(e.Usuario) ? "" : " · " + e.Usuario)</span>
+                                    <div class="grupo-vista">
+                                        <span class="nombre-vista">@(v.Key ?? "Data product") <span class="sutil">· @v.Count() @(v.Count() == 1 ? "movimiento" : "movimientos")</span></span>
+                                        @* Más reciente primero; el mismo día (sin hora en la base): avances, cambio de etapa y al final el alta de la vista. *@
+                                        @foreach (var e in v.OrderByDescending(e => e.Fecha)
+                                                            .ThenBy(e => e.Tipo switch { "Vista agregada al DP" => 3, "Cambio de etapa" => 2, _ => 1 }))
+                                        {
+                                            <div class="entrada">
+                                                <span>@e.Detalle</span>
+                                                <span class="det">@e.Tipo · @Ui.Fecha(e.Fecha)@(string.IsNullOrEmpty(e.Usuario) ? "" : " · " + e.Usuario)</span>
+                                            </div>
+                                        }
                                     </div>
                                 }
                             </div>

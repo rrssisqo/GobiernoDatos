@@ -21,6 +21,7 @@ public sealed class GobiernoStore(TimeProvider reloj)
     public List<ObjetoFuente> Objetos { get; } = [];
     public List<VistaObjeto> VistaObjetos { get; } = [];
     public List<Regla> Reglas { get; } = [];
+    public List<string> FrecuenciasRegla { get; } = ["Diaria", "Semanal", "Mensual", "Trimestral"];   // gd.frecuencia_regla
     public List<ResumenCalidad> Resumenes { get; } = [];
     public List<CargaRechazo> RechazosCalidad { get; } = [];
 

@@ -72,14 +72,20 @@
                         @foreach (var g in cat.Gobiernos.Append(f.Gobierno).OfType<string>().Distinct()) { <option value="@g" selected="@(f.Gobierno == g)">@g</option> }
                     </select>
                 </label>
-                <label class="campo">Responsable
-                    <input type="text" name="Regla.Responsable" value="@f.Responsable" maxlength="150" list="lista-responsables-regla" />
+                <label class="campo">Contacto
+                    <input type="text" name="Regla.Contactos" value="@f.Contactos" maxlength="1000" placeholder="nombre.apellido@mabe.com.mx" />
                 </label>
                 <label class="campo">Frecuencia
                     <select name="Regla.Frecuencia">
                         <option value="">—</option>
-                        @foreach (var fr in DefinicionRegla.Frecuencias) { <option value="@fr" selected="@(f.Frecuencia == fr)">@DefinicionRegla.Etiqueta(fr)</option> }
+                        @foreach (var fr in cat.Frecuencias.Append(f.Frecuencia).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+                        {
+                            <option value="@fr" selected="@(string.Equals(f.Frecuencia, fr, StringComparison.OrdinalIgnoreCase))">@fr</option>
+                        }
                     </select>
+                </label>
+                <label class="campo" style="flex:0 1 130px">Hora
+                    <input type="time" name="Regla.Hora" value="@f.Hora?.ToString("HH:mm")" />
                 </label>
             </div>
         </fieldset>
@@ -97,6 +103,7 @@
             <div class="form-fila">
                 <label class="campo">Tabla STG <input type="text" name="Regla.TablaStg" value="@f.TablaStg" maxlength="128" placeholder="STG_0MATERIAL" class="mono" /></label>
                 <label class="campo">Mapping <input type="text" name="Regla.Mapping" value="@f.Mapping" maxlength="128" placeholder="m_DQ_PMATERIAL" class="mono" /></label>
+                <label class="campo">Task flow <input type="text" name="Regla.TaskFlow" value="@f.TaskFlow" maxlength="128" placeholder="tf_DQ_PMATERIAL" class="mono" /></label>
                 <label class="campo" style="flex:0 1 110px">No. CSV <input type="number" name="Regla.NoCsv" value="@f.NoCsv" min="1" /></label>
                 <label class="campo">Nombre del CSV <input type="text" name="Regla.NombreCsv" value="@f.NombreCsv" maxlength="260" placeholder="07PMATERIAL_RL_4_1.csv" class="mono" /></label>
             </div>
@@ -117,10 +124,21 @@
             </div>
         </fieldset>
 
+        <fieldset>
+            <legend>Producción</legend>
+            <div class="form-fila">
+                <label class="campo" style="flex:0 1 180px">Fecha de producción
+                    <input type="date" name="Regla.FechaProduccion" value="@f.FechaProduccion?.ToString("yyyy-MM-dd")" />
+                </label>
+                <label class="campo" style="flex:3 1 400px">Comentarios
+                    <textarea name="Regla.Comentarios" rows="3" maxlength="2000">@f.Comentarios</textarea>
+                </label>
+            </div>
+        </fieldset>
+
         <datalist id="lista-tipos">@foreach (var x in cat.Tipos) { <option value="@x"></option> }</datalist>
-        <datalist id="lista-responsables-regla">@foreach (var x in cat.Responsables) { <option value="@x"></option> }</datalist>
         <datalist id="lista-objetos">@foreach (var x in cat.Objetos) { <option value="@x"></option> }</datalist>
-        <p class="ayuda">* Obligatorio. Objetos BW y destinatarios se separan con punto y coma; los objetos y tipos de regla que no existan se dan de alta.
+        <p class="ayuda">* Obligatorio. Objetos BW, contactos y destinatarios se separan con punto y coma; los objetos y tipos de regla que no existan se dan de alta.
            @if (!Model.EsAlta) { <text>Los cambios al query de validación quedan en su historial.</text> }</p>
         <div class="form-fila" style="justify-content:flex-start">
             <button type="submit" class="btn btn-primario" style="flex:0 0 auto">@(Model.EsAlta ? "Dar de alta" : "Guardar cambios")</button>

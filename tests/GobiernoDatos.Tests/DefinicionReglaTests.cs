@@ -6,7 +6,7 @@ public class DefinicionReglaTests
 {
     private static DatosRegla Regla(string codigo = "rl_4_1", string descripcion = "Gestión de Materiales", string[]? destinatarios = null,
                                     string? dimension = "VALIDEZ", int etapa = 1) =>
-        new(codigo, " Nulos ", descripcion, "  ", null, dimension, "Datos Maestros", null, "MATL_TYPE", ["PMATERIAL"], null, null, 7,
+        new(codigo, " Nulos ", descripcion, "  ", null, dimension, "Datos Maestros", [], "MATL_TYPE", ["PMATERIAL"], null, null, 7,
             null, null, true, null, destinatarios ?? [], etapa);
 
     [Fact]
@@ -36,5 +36,13 @@ public class DefinicionReglaTests
         Assert.Throws<DomainException>(() => DefinicionRegla.Normalizar(Regla(destinatarios: ["no es correo"])));
         Assert.Equal(["PMATERIAL", "ZMM_O09"], DefinicionRegla.Lista(" pmaterial; zmm_o09 ;PMATERIAL", mayusculas: true));
         Assert.Equal(["a@mabe.com.mx", "b@mabe.com.mx"], DefinicionRegla.Lista("a@mabe.com.mx, b@mabe.com.mx", mayusculas: false));
+    }
+
+    [Fact]
+    public void Valida_contactos_y_limpia_los_campos_nuevos()
+    {
+        Assert.Throws<DomainException>(() => DefinicionRegla.Normalizar(Regla() with { Contactos = ["sin arroba"] }));
+        var r = DefinicionRegla.Normalizar(Regla() with { Contactos = ["contacto@mabe.com.mx"], TaskFlow = " tf_X ", Comentarios = " ", Frecuencia = " Semanal " });
+        Assert.Equal(("tf_X", null, "Semanal"), (r.TaskFlow, r.Comentarios, r.Frecuencia));
     }
 }

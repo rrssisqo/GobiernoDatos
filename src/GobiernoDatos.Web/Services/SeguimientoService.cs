@@ -32,7 +32,8 @@ public sealed record RubroDpDetalle(Rubro Rubro, decimal Pct, EstadoAvance? Esta
 public sealed record VistaEnDp(int VistaId, string Nombre, string Ruta, string Etapa, int EtapaOrden,
                                IReadOnlyList<CeldaRubro> Rubros, int Reglas, Rubro? RubroActivo);
 
-public sealed record EntradaBitacora(Semana Semana, DateOnly Fecha, string Tipo, string Detalle, string Usuario);
+// Vista = nombre de la vista cuando el movimiento es de una vista (para agrupar la bitácora por vista); nulo si es del data product.
+public sealed record EntradaBitacora(Semana Semana, DateOnly Fecha, string Tipo, string Detalle, string Usuario, string? Vista = null);
 
 public sealed record DetalleDp(DataProduct Dp, Semana Semana, decimal Avance, IReadOnlyList<RubroDpDetalle> RubrosDp,
                                IReadOnlyList<VistaEnDp> Vistas, IReadOnlyList<CeldaRubro> PromedioVistas,
@@ -183,21 +184,22 @@ public sealed class SeguimientoService(GobiernoStore s) : ISeguimientoService
         var entradas = new List<EntradaBitacora>();
         entradas.AddRange(s.Notas.Where(n => n.DpId == dpId).Select(n => new EntradaBitacora(
             Semana.DeId(n.SemanaId), DateOnly.FromDateTime(n.FechaRegistro), "Nota semanal",
-            n.RubroId is null ? n.Comentario : $"{Catalogos.Rubro(n.RubroId.Value).Nombre} · {n.Comentario}", n.Usuario)));
+            n.RubroId is null ? n.Comentario : $"{Catalogos.Rubro(n.RubroId.Value).Nombre} · {n.Comentario}", n.Usuario,
+            n.VistaId is int nv ? NombreVista(nv) : null)));
         entradas.AddRange(s.MovAvances.Where(a => a.DpId == dpId && !a.EsInicial).Select(a => new EntradaBitacora(
             Semana.De(a.Fecha), a.Fecha, "Avance de rubro DP",
             $"{Catalogos.Rubro(a.RubroId).Nombre}: {a.Pct:0.#}% {Avance.Etiqueta(a.Estado)}", a.Usuario)));
         entradas.AddRange(s.MovAvances.Where(a => a.VistaId is int v && EnDp(v, a.Fecha)).Select(a => new EntradaBitacora(
             Semana.De(a.Fecha), a.Fecha, "Avance de rubro",
-            $"{NombreVista(a.VistaId!.Value)} · {Catalogos.Rubro(a.RubroId).Nombre}: {a.Pct:0.#}% {Avance.Etiqueta(a.Estado)}", a.Usuario)));
+            $"{Catalogos.Rubro(a.RubroId).Nombre}: {a.Pct:0.#}% {Avance.Etiqueta(a.Estado)}", a.Usuario, NombreVista(a.VistaId!.Value))));
         entradas.AddRange(s.MovEtapas.Where(m => EnDp(m.VistaId, m.Fecha)).Select(m => new EntradaBitacora(
             Semana.De(m.Fecha), m.Fecha, "Cambio de etapa",
-            $"{NombreVista(m.VistaId)} → {Catalogos.EtapaPorOrden(m.EtapaOrden).Nombre}{(m.EsRegreso ? " (regreso)" : "")} · {Catalogos.NombreMotivo(m.MotivoId)}{(m.Comentario is null ? "" : " · " + m.Comentario)}",
-            m.Usuario)));
+            $"{Catalogos.EtapaPorOrden(m.EtapaOrden).Nombre}{(m.EsRegreso ? " (regreso)" : "")} · {Catalogos.NombreMotivo(m.MotivoId)}{(m.Comentario is null ? "" : " · " + m.Comentario)}",
+            m.Usuario, NombreVista(m.VistaId))));
         entradas.AddRange(vistasDp.Select(x => new EntradaBitacora(
-            Semana.De(x.FechaDesde), x.FechaDesde, "Vista agregada al DP", NombreVista(x.VistaId), "")));
+            Semana.De(x.FechaDesde), x.FechaDesde, "Vista agregada al DP", "Vista agregada al data product", "", NombreVista(x.VistaId))));
         entradas.AddRange(vistasDp.Where(x => x.FechaHasta is not null).Select(x => new EntradaBitacora(
-            Semana.De(x.FechaHasta!.Value), x.FechaHasta!.Value, "Vista retirada del DP", NombreVista(x.VistaId), "")));
+            Semana.De(x.FechaHasta!.Value), x.FechaHasta!.Value, "Vista retirada del DP", "Vista retirada del data product", "", NombreVista(x.VistaId))));
 
         return entradas.OrderByDescending(e => e.Semana.Id).ThenByDescending(e => e.Fecha).ToList();
     }

@@ -38,6 +38,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/012_recert_gerente_unico.sql", "db/migrations/013_recert_anular_ticket.sql",
                                         "db/migrations/014_recert_asignacion_infra.sql", "db/migrations/015_recert_responsable_infra_unico.sql",
                                         "db/migrations/016_recert_recordatorio_correo.sql",
+                                        "db/migrations/017_regla_campos_frecuencia.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -115,6 +116,9 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         Assert.Equal(50, v.Rubros.Single(r => r.RubroId == 5).Pct);
         Assert.Equal(1, v.RubroActivo!.RubroId);
         Assert.Contains(detalle.Bitacora, b => b.Detalle.Contains("Avance de glosario") && b.Usuario == "prueba");
+        // Bitácora agrupable por vista: los movimientos de la vista traen su nombre.
+        Assert.Contains(detalle.Bitacora, b => b.Tipo == "Avance de rubro" && b.Vista == "Costo de Nomina");
+        Assert.Contains(detalle.Bitacora, b => b.Tipo == "Vista agregada al DP" && b.Vista == "Costo de Nomina" && b.Detalle == "Vista agregada al data product");
 
         using var c = db.Abrir();
         Assert.Equal("prueba", c.ExecuteScalar<string>("SELECT TOP (1) usuario FROM gd.mov_avance_vista ORDER BY mov_id DESC"));
@@ -471,14 +475,25 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         var db = Db();
         var reglas = new SqlReglasService(db);
         DatosRegla Datos(string codigo, string descripcion, int etapa, string[] objetos) => new(codigo, "Duplicados", descripcion, "Funcional", null,
-            "UNICIDAD", "Datos Maestros", "Responsable de regla", "MATL_TYPE", objetos, "STG_X", "m_DQ_X", 99, "99X.csv", "MENSUAL", false,
-            "Asunto", ["datos@mabe.com.mx"], etapa, "SELECT 1");
+            "UNICIDAD", "Datos Maestros", ["contacto@mabe.com.mx"], "MATL_TYPE", objetos, "STG_X", "m_DQ_X", 99, "99X.csv", "MENSUAL", false,
+            "Asunto", ["datos@mabe.com.mx"], etapa, "SELECT 1", "tf_DQ_X", new TimeOnly(6, 30), new DateOnly(2026, 10, 1), "Comentario de prueba");
         var id = reglas.Crear(Datos("rl_9_9", "Regla de prueba", 2, ["PMATERIAL", "ZNUEVO_O99"]), "prueba");
         Assert.Throws<DomainException>(() => reglas.Crear(Datos("RL_9_9", "Otra", 1, []), "prueba"));      // código repetido
 
         var r = reglas.Obtener(id)!;
         Assert.True(r.Activa);
-        Assert.Equal(("RL_9_9", "Duplicados", "Datos Maestros", "MENSUAL", false, 2), (r.Datos.Codigo, r.Datos.TipoRegla, r.Datos.Gobierno, r.Datos.Frecuencia, r.Datos.EscribeLog, r.Datos.EtapaOrden));
+        Assert.Equal(("RL_9_9", "Duplicados", "Datos Maestros", "Mensual", false, 2), (r.Datos.Codigo, r.Datos.TipoRegla, r.Datos.Gobierno, r.Datos.Frecuencia, r.Datos.EscribeLog, r.Datos.EtapaOrden));
+        Assert.Equal(("tf_DQ_X", new TimeOnly(6, 30), new DateOnly(2026, 10, 1), "Comentario de prueba"), (r.Datos.TaskFlow, r.Datos.Hora, r.Datos.FechaProduccion, r.Datos.Comentarios));
+        Assert.Equal(["contacto@mabe.com.mx"], r.Datos.Contactos);
+        Assert.Contains(reglas.Listar(), f => f.Codigo == "RL_9_9" && f.Contactos.Single() == "contacto@mabe.com.mx" && f.Frecuencia == "Mensual");
+        Assert.Throws<DomainException>(() => reglas.Crear(Datos("RL_9_8", "Otra", 1, []) with { Frecuencia = "Cada luna" }, "prueba"));   // fuera del catálogo
+
+        // Catálogo de frecuencias: alta, no se elimina si la usa una regla.
+        reglas.CrearFrecuencia("Quincenal");
+        Assert.Contains("Quincenal", reglas.Catalogos().Frecuencias);
+        Assert.Throws<DomainException>(() => reglas.CrearFrecuencia("quincenal"));
+        Assert.Throws<DomainException>(() => reglas.EliminarFrecuencia("Mensual"));
+        reglas.EliminarFrecuencia("Quincenal");
         Assert.Equal(["PMATERIAL", "ZNUEVO_O99"], r.Datos.Objetos);
         Assert.Equal(["datos@mabe.com.mx"], r.Datos.Destinatarios);
         Assert.Contains(new SqlCalidadService(db).Tablero(202610, null).PorRegla, f => f.Codigo == "RL_9_9" && f.Medicion is null);

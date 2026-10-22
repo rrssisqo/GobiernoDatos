@@ -4,19 +4,20 @@ using System.Text.RegularExpressions;
 namespace GobiernoDatos.Web.Domain;
 
 // Definición de una regla de calidad para alta y cambio (columnas de la lista "Reglas" de SharePoint → gd.regla y sus tablas hijas).
+// Contactos = correos de contacto de la regla (gd.regla_contacto CONTACTO); Frecuencia = nombre del catálogo gd.frecuencia_regla.
 public sealed record DatosRegla(
     string Codigo, string? TipoRegla, string Descripcion, string? ReglaFuncional, string? PropositoNegocio,
-    string? DimensionDq, string? Gobierno, string? Responsable, string? CamposEvaluados, IReadOnlyList<string> Objetos,
+    string? DimensionDq, string? Gobierno, IReadOnlyList<string> Contactos, string? CamposEvaluados, IReadOnlyList<string> Objetos,
     string? TablaStg, string? Mapping, int? NoCsv, string? NombreCsv, string? Frecuencia, bool EscribeLog,
-    string? CorreoAsunto, IReadOnlyList<string> Destinatarios, int EtapaOrden, string? QueryValidacion = null);
+    string? CorreoAsunto, IReadOnlyList<string> Destinatarios, int EtapaOrden, string? QueryValidacion = null,
+    string? TaskFlow = null, TimeOnly? Hora = null, DateOnly? FechaProduccion = null, string? Comentarios = null);
 
 public sealed record EtapaRegla(int Orden, string Nombre);
 
 public static partial class DefinicionRegla
 {
-    // Valores permitidos por los CHECK de gd.regla y el catálogo gd.etapa_regla.
+    // Valores permitidos por el CHECK de gd.regla y el catálogo gd.etapa_regla (las frecuencias son un catálogo editable).
     public static readonly string[] Dimensiones = ["COMPLETITUD", "VALIDEZ", "UNICIDAD", "CONSISTENCIA", "EXACTITUD", "OPORTUNIDAD"];
-    public static readonly string[] Frecuencias = ["DIARIA", "SEMANAL", "MENSUAL", "TRIMESTRAL"];
     public static readonly EtapaRegla[] Etapas =
     [
         new(1, "Definición"), new(2, "Desarrollo"), new(3, "Pruebas DEV"), new(4, "Validación"),
@@ -39,12 +40,11 @@ public static partial class DefinicionRegla
         var descripcion = (r.Descripcion ?? "").Trim();
         if (descripcion.Length == 0) throw new DomainException("Indica la descripción de la regla.");
         if (r.DimensionDq is { } d && !Dimensiones.Contains(d)) throw new DomainException("La dimensión de calidad no es válida.");
-        if (r.Frecuencia is { } f && !Frecuencias.Contains(f)) throw new DomainException("La frecuencia no es válida.");
         if (r.NoCsv is <= 0) throw new DomainException("El número de CSV debe ser mayor que cero.");
         if (Etapas.All(e => e.Orden != r.EtapaOrden)) throw new DomainException("La etapa no es válida.");
         foreach (var o in r.Objetos)
             if (o.Length > 100) throw new DomainException($"El objeto BW «{o[..20]}…» es demasiado largo (máximo 100).");
-        foreach (var correo in r.Destinatarios)
+        foreach (var correo in r.Destinatarios.Concat(r.Contactos))
             if (!MailAddress.TryCreate(correo, out var m) || m.Address != correo) throw new DomainException($"«{correo}» no es un correo válido.");
 
         Largo(descripcion, 300, "La descripción");
@@ -56,12 +56,15 @@ public static partial class DefinicionRegla
         Largo(r.NombreCsv, 260, "El nombre del CSV");
         Largo(r.CorreoAsunto, 200, "El asunto del correo");
         Largo(r.TipoRegla, 80, "El tipo de regla");
-        Largo(r.Responsable, 150, "El responsable");
+        Largo(r.TaskFlow, 128, "El task flow");
+        Largo(r.Frecuencia, 40, "La frecuencia");
+        Largo(r.Comentarios, 2000, "Los comentarios");
 
         return r with
         {
             Codigo = codigo, Descripcion = descripcion, TipoRegla = Nulo(r.TipoRegla), ReglaFuncional = Nulo(r.ReglaFuncional),
-            PropositoNegocio = Nulo(r.PropositoNegocio), Gobierno = Nulo(r.Gobierno), Responsable = Nulo(r.Responsable),
+            PropositoNegocio = Nulo(r.PropositoNegocio), Gobierno = Nulo(r.Gobierno), Frecuencia = Nulo(r.Frecuencia),
+            TaskFlow = Nulo(r.TaskFlow), Comentarios = Nulo(r.Comentarios),
             CamposEvaluados = Nulo(r.CamposEvaluados), TablaStg = Nulo(r.TablaStg), Mapping = Nulo(r.Mapping),
             NombreCsv = Nulo(r.NombreCsv), CorreoAsunto = Nulo(r.CorreoAsunto), QueryValidacion = Nulo(r.QueryValidacion),
         };

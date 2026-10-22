@@ -18,7 +18,7 @@ public class EditarModel(IReglasService reglas, IUsuarioActual usuario) : Portal
         public string? PropositoNegocio { get; set; }
         public string? DimensionDq { get; set; } = "VALIDEZ";
         public string? Gobierno { get; set; }
-        public string? Responsable { get; set; }
+        public string? Contactos { get; set; }
         public string? CamposEvaluados { get; set; }
         public string? Objetos { get; set; }
         public string? TablaStg { get; set; }
@@ -31,6 +31,10 @@ public class EditarModel(IReglasService reglas, IUsuarioActual usuario) : Portal
         public string? Destinatarios { get; set; }
         public int EtapaOrden { get; set; } = 1;
         public string? QueryValidacion { get; set; }
+        public string? TaskFlow { get; set; }
+        public TimeOnly? Hora { get; set; }
+        public DateOnly? FechaProduccion { get; set; }
+        public string? Comentarios { get; set; }
     }
 
     [BindProperty(SupportsGet = true)] public int? Id { get; set; }
@@ -52,10 +56,11 @@ public class EditarModel(IReglasService reglas, IUsuarioActual usuario) : Portal
             Regla = new FormRegla
             {
                 Codigo = d.Codigo, TipoRegla = d.TipoRegla, Descripcion = d.Descripcion, ReglaFuncional = d.ReglaFuncional,
-                PropositoNegocio = d.PropositoNegocio, DimensionDq = d.DimensionDq, Gobierno = d.Gobierno, Responsable = d.Responsable,
+                PropositoNegocio = d.PropositoNegocio, DimensionDq = d.DimensionDq, Gobierno = d.Gobierno, Contactos = string.Join("; ", d.Contactos),
                 CamposEvaluados = d.CamposEvaluados, Objetos = string.Join("; ", d.Objetos), TablaStg = d.TablaStg, Mapping = d.Mapping,
                 NoCsv = d.NoCsv, NombreCsv = d.NombreCsv, Frecuencia = d.Frecuencia, EscribeLog = d.EscribeLog, CorreoAsunto = d.CorreoAsunto,
                 Destinatarios = string.Join("; ", d.Destinatarios), EtapaOrden = d.EtapaOrden, QueryValidacion = d.QueryValidacion,
+                TaskFlow = d.TaskFlow, Hora = d.Hora, FechaProduccion = d.FechaProduccion, Comentarios = d.Comentarios,
             };
         }
         Catalogos = reglas.Catalogos();
@@ -67,10 +72,11 @@ public class EditarModel(IReglasService reglas, IUsuarioActual usuario) : Portal
         var f = Regla;
         var datos = new DatosRegla(
             f.Codigo ?? "", f.TipoRegla, f.Descripcion ?? "", f.ReglaFuncional, f.PropositoNegocio,
-            string.IsNullOrEmpty(f.DimensionDq) ? null : f.DimensionDq, f.Gobierno, f.Responsable, f.CamposEvaluados,
+            string.IsNullOrEmpty(f.DimensionDq) ? null : f.DimensionDq, f.Gobierno, DefinicionRegla.Lista(f.Contactos, mayusculas: false), f.CamposEvaluados,
             DefinicionRegla.Lista(f.Objetos, mayusculas: true), f.TablaStg, f.Mapping, f.NoCsv, f.NombreCsv,
             string.IsNullOrEmpty(f.Frecuencia) ? null : f.Frecuencia, f.EscribeLog, f.CorreoAsunto,
-            DefinicionRegla.Lista(f.Destinatarios, mayusculas: false), f.EtapaOrden, f.QueryValidacion);
+            DefinicionRegla.Lista(f.Destinatarios, mayusculas: false), f.EtapaOrden, f.QueryValidacion,
+            f.TaskFlow, f.Hora, f.FechaProduccion, f.Comentarios);
         try
         {
             if (Id is int id)

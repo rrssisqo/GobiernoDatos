@@ -114,8 +114,8 @@ public sealed class SqlSeguimientoService(SqlConexion db) : ISeguimientoService
     private sealed record VistaSemanaRow(int vista_id, string vista, string ruta_tecnica, int rubro_id, decimal pct, string estado, int etapa_orden_actual);
     private sealed record EtapaRow(int vista_id, int etapa_orden);
     private sealed record ReglasRow(int vista_id, int n);
-    private sealed record BitacoraRow(DateTime fecha, string tipo, string detalle, string? usuario);
-    private sealed record LogRow(int semana_id, DateTime fecha_registro, string comentario, int? rubro_id, string usuario);
+    private sealed record BitacoraRow(DateTime fecha, string tipo, string detalle, string? usuario, string? vista);
+    private sealed record LogRow(int semana_id, DateTime fecha_registro, string comentario, int? rubro_id, string usuario, string? vista);
 
     public DetalleDp? Detalle(int dpId, Semana semana)
     {
@@ -155,10 +155,16 @@ public sealed class SqlSeguimientoService(SqlConexion db) : ISeguimientoService
 
             SELECT ISNULL((SELECT pct_avance FROM gd.vw_avance_dp_total_semana WHERE semana_id = @s AND dp_id = @id), 0);
 
-            SELECT fecha, tipo, detalle, usuario FROM gd.vw_bitacora_actividades
-            WHERE dp_id = @id AND tipo <> N'Nota semanal' AND fecha IS NOT NULL;
+            SELECT b.fecha, b.tipo,
+                   CASE b.tipo WHEN N'Vista agregada al DP' THEN N'Vista agregada al data product'
+                               WHEN N'Vista retirada del DP' THEN N'Vista retirada del data product' ELSE b.detalle END AS detalle,
+                   b.usuario, v.nombre_negocio AS vista
+            FROM gd.vw_bitacora_actividades AS b
+            LEFT JOIN gd.vista_gobernada AS v ON v.vista_id = b.vista_id
+            WHERE b.dp_id = @id AND b.tipo <> N'Nota semanal' AND b.fecha IS NOT NULL;
 
-            SELECT l.semana_id, l.fecha_registro, l.comentario, l.rubro_id, l.usuario FROM gd.log_semanal AS l WHERE l.dp_id = @id;
+            SELECT l.semana_id, l.fecha_registro, l.comentario, l.rubro_id, l.usuario, v.nombre_negocio AS vista
+            FROM gd.log_semanal AS l LEFT JOIN gd.vista_gobernada AS v ON v.vista_id = l.vista_id WHERE l.dp_id = @id;
 
             SELECT COUNT(*) FROM gd.mov_avance_dp WHERE dp_id = @id AND nivel = 'VISTA' AND fecha <= @fin;
             """, new { id = dpId, s = semana.Id, fin = P(semana.Fin) });
@@ -188,9 +194,9 @@ public sealed class SqlSeguimientoService(SqlConexion db) : ISeguimientoService
                 etapaHoy.TryGetValue(f.vista_id, out var orden) ? Catalogos.RubroActivo(orden) : null);
         }).OrderBy(v => v.Nombre).ToList();
 
-        var entradas = bitacora.Select(b => new EntradaBitacora(Semana.De(D(b.fecha)), D(b.fecha), b.tipo, b.detalle, b.usuario ?? ""))
+        var entradas = bitacora.Select(b => new EntradaBitacora(Semana.De(D(b.fecha)), D(b.fecha), b.tipo, b.detalle, b.usuario ?? "", b.vista))
             .Concat(notas.Select(n => new EntradaBitacora(Semana.DeId(n.semana_id), D(n.fecha_registro), "Nota semanal",
-                n.rubro_id is null ? n.comentario : $"{Catalogos.Rubro(n.rubro_id.Value).Nombre} · {n.comentario}", n.usuario)))
+                n.rubro_id is null ? n.comentario : $"{Catalogos.Rubro(n.rubro_id.Value).Nombre} · {n.comentario}", n.usuario, n.vista)))
             .OrderByDescending(e => e.Semana.Id).ThenByDescending(e => e.Fecha).ToList();
 
         var entidad = new DataProduct

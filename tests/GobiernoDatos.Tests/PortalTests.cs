@@ -58,6 +58,10 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
         var final = await respuesta.Content.ReadAsStringAsync();
         Assert.Contains("Movimiento registrado.", final);
         Assert.Contains("Prueba de punta a punta", final);
+        // La bitácora se agrupa: lo del data product primero y luego un bloque por vista.
+        var bitacora = Regex.Match(WebUtility.HtmlDecode(final), "<div class=\"grupos-vista\">.*?</div>\\s*</div>\\s*</div>", RegexOptions.Singleline).Value;
+        Assert.StartsWith("<div class=\"grupos-vista\">", bitacora);
+        Assert.Contains("<span class=\"nombre-vista\">Data product", bitacora);
         Assert.Matches(@"[?&][Ii]d=" + Regex.Match(detalle, @"id=(\d+)").Groups[1].Value, respuesta.RequestMessage!.RequestUri!.Query);
 
         // Vuelve con el mismo rubro seleccionado y su valor vigente disponible para precargar el formulario.
@@ -226,6 +230,8 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
             ["Regla.Codigo"] = codigo, ["Regla.Descripcion"] = descripcion, ["Regla.TipoRegla"] = "Duplicados",
             ["Regla.DimensionDq"] = "UNICIDAD", ["Regla.Gobierno"] = gobierno, ["Regla.Objetos"] = "pmaterial; znuevo_o01",
             ["Regla.Destinatarios"] = "datos@mabe.com.mx", ["Regla.EtapaOrden"] = etapa, ["Regla.EscribeLog"] = "false",
+            ["Regla.Contactos"] = "contacto@mabe.com.mx", ["Regla.TaskFlow"] = "tf_DQ_PRUEBA", ["Regla.Frecuencia"] = "Semanal",
+            ["Regla.Hora"] = "07:15", ["Regla.FechaProduccion"] = "2026-10-01", ["Regla.Comentarios"] = "Comentario de producción",
             ["__RequestVerificationToken"] = Token(html),
         };
 
@@ -237,6 +243,10 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
         Assert.Contains("Validación de prueba", fila);
         Assert.Contains("PMATERIAL, ZNUEVO_O01", fila);                       // objeto nuevo dado de alta
         Assert.Contains("Desarrollo", fila);
+        Assert.Contains("Contacto: contacto@mabe.com.mx", fila);                              // contacto en lugar de responsable
+        Assert.Contains("Semanal", fila);
+        Assert.Contains("07:15", fila);
+        Assert.Contains("2026-10-01", fila);
         var editar = WebUtility.HtmlDecode(Regex.Match(fila, "href=\"(/Reglas/Editar\\?id=\\d+)\"").Groups[1].Value);
         var id = Regex.Match(editar, @"id=(\d+)").Groups[1].Value;
 
@@ -250,6 +260,12 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
         html = WebUtility.HtmlDecode(await client.GetStringAsync(editar));
         Assert.Contains("value=\"PMATERIAL; ZNUEVO_O01\"", html);
         Assert.Contains("value=\"datos@mabe.com.mx\"", html);
+        Assert.Contains("value=\"contacto@mabe.com.mx\"", html);
+        Assert.Contains("value=\"tf_DQ_PRUEBA\"", html);
+        Assert.Contains("value=\"07:15\"", html);
+        Assert.Contains("value=\"2026-10-01\"", html);
+        Assert.Contains(">Comentario de producción</textarea>", html);
+        Assert.DoesNotContain("Regla.Responsable", html);
         Assert.Contains("readonly", Regex.Match(html, "<input type=\"text\" value=\"RL_9_1\"[^>]*>").Value);
         r = await client.PostAsync(Atributo(html, "form-regla", "action"), new FormUrlEncodedContent(Datos("XX_CAMBIO", "Descripción corregida", "6")));
         final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
@@ -298,6 +314,15 @@ public class PortalTests(PortalTests.Fabrica fabrica) : IClassFixture<PortalTest
         final = WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
         Assert.True(final.Contains("Regla RL_1_1 actualizada."), Regex.Match(final, "aviso-error[^>]*>([^<]*)<").Groups[1].Value);
         Assert.Contains($"<td>{gobiernoRl11}</td>", Regex.Match(final, @"<tr data-texto=""RL_1_1 .*?</tr>", RegexOptions.Singleline).Value);
+
+        // Catálogo de frecuencias desde el listado: alta y uso en el formulario.
+        listaHtml = await client.GetStringAsync("/Reglas");
+        r = await client.PostAsync(Atributo(listaHtml, "form-frecuencia", "action"), new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["nombre"] = "Quincenal", ["__RequestVerificationToken"] = Token(listaHtml),
+        }));
+        Assert.Contains("Frecuencia «Quincenal» agregada al catálogo.", WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync()));
+        Assert.Contains("<option value=\"Quincenal\">Quincenal</option>", await client.GetStringAsync("/Reglas/Editar"));
 
         // Calidad ya no tiene el formulario; enlaza al catálogo.
         var calidad = await client.GetStringAsync("/Calidad");

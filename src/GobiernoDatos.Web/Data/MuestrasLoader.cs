@@ -139,6 +139,11 @@ public static partial class MuestrasLoader
                 if (obj is null) s.Objetos.Add(obj = new ObjetoFuente { ObjetoId = (int)s.NuevoId(), Nombre = nombre.ToUpperInvariant() });
                 regla.Objetos.Add(obj.ObjetoId);
             }
+            regla.Contactos.AddRange(DefinicionRegla.Lista(f.GetValueOrDefault("CORREO_CONTACTOS"), mayusculas: false));
+            // Fecha de producción: operación PRD o, si no hay, pase a PRD ("6/17/2024 1:00 AM", "08/08/2024 01:00").
+            if (DateTime.TryParse(f.GetValueOrDefault("FECHA_OPERACION_PRD") is { Length: > 0 } op ? op : f.GetValueOrDefault("FECHA_PASE_A_PRD"),
+                                  System.Globalization.CultureInfo.InvariantCulture, out var prd))
+                regla.FechaProduccion = DateOnly.FromDateTime(prd);
             s.Reglas.Add(regla);
         }
     }

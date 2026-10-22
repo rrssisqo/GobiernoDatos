@@ -135,6 +135,11 @@ public sealed class Regla
     public string? CorreoAsunto { get; set; }
     public string? QueryValidacion { get; set; }
     public List<string> Destinatarios { get; } = [];
+    public List<string> Contactos { get; } = [];
+    public string? TaskFlow { get; set; }
+    public TimeOnly? Hora { get; set; }
+    public DateOnly? FechaProduccion { get; set; }
+    public string? Comentarios { get; set; }
     public DateOnly? FechaAlta { get; set; }
 }
 
