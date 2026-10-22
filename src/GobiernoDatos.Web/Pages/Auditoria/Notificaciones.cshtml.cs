@@ -3,13 +3,17 @@ using GobiernoDatos.Web.Data;
 using GobiernoDatos.Web.Pages.Shared;
 using GobiernoDatos.Web.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using static GobiernoDatos.Web.Services.RecordatoriosService;
 
 namespace GobiernoDatos.Web.Pages.Auditoria;
 
 // Evidencia "Solicitud de validación a los responsables de área": por macro área, si se notificó a su responsable
 // (recordatorios de Eventos) y el correo enviado en .eml (migración 016); y el VoBo del gerente (Power Automate) con su
-// constancia en Excel: solicitud, envío, respuesta y las bajas que se le pidió autorizar (migración 018).
-public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual usuario) : PortalPageModel
+// constancia en correo (.eml) generada por el portal: solicitud, envío, respuesta y las bajas que se le pidió autorizar
+// (migración 018). El VoBo lo envía Power Automate, así que el portal no tiene el correo original: el .eml lo dice.
+public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual usuario, IOptions<GobiernoDatosOptions> opciones,
+                                 TimeProvider reloj) : PortalPageModel
 {
     public sealed record FilaMacro(string MacroArea, IReadOnlyList<string> Responsables, int Pendientes, bool Confirmada,
                                    IReadOnlyList<RecertRecordatorio> Envios, VoBoGerente? VoBo = null)
@@ -46,39 +50,59 @@ public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual 
         return eml is null ? NotFound() : File(eml, "message/rfc822", $"notificacion_{id}.eml");
     }
 
-    // Constancia del VoBo: hoja con la solicitud y la respuesta, y hoja con las bajas que se pidió autorizar.
+    // Constancia del VoBo en correo (.eml): solicitud, envío, respuesta y las bajas que se pidió autorizar.
     public IActionResult OnGetVoBo(long id)
     {
         if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
         Cargar();
         var v = VoBos.FirstOrDefault(x => x.VoBoId == id);
         if (v is null) return NotFound();
-        return File(Constancia(v), TipoXlsx, NombreConstancia(v));
+        return File(Constancia(v), "message/rfc822", NombreConstancia(v));
     }
 
-    private const string TipoXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
     private string NombreConstancia(VoBoGerente v) =>
-        $"vobo_{EscritorExcel.NombreArchivo(v.MacroArea)}_{v.FechaSolicitud:yyyyMMdd_HHmm}_{v.VoBoId}.xlsx";
+        $"vobo_{EscritorExcel.NombreArchivo(v.MacroArea)}_{v.FechaSolicitud:yyyyMMdd_HHmm}_{v.VoBoId}.eml";
 
     private byte[] Constancia(VoBoGerente v)
     {
         var evento = Eventos.FirstOrDefault(e => e.EventoId == v.EventoId)?.Nombre ?? v.EventoId.ToString();
-        object?[][] datos =
-        [
-            ["Evento", evento], ["Macro área", v.MacroArea], ["Id de la solicitud", v.VoBoId],
-            ["Gerente", v.GerenteNombre], ["Correo del gerente", v.GerenteCorreo], ["Bajas a autorizar", v.Bajas],
-            ["Solicitado por", v.SolicitadoPor], ["Fecha de solicitud", v.FechaSolicitud],
-            ["Enviado al gerente (Power Automate)", v.FechaEnvio], ["Estatus", Etiqueta(v.Estatus)],
-            ["Respondió", v.RespondidoPor], ["Fecha de respuesta", v.FechaRespuesta], ["Comentario del gerente", v.Comentario],
-            ["Motivo de cancelación", v.MotivoCancelacion],
-        ];
-        return EscritorExcel.Libro(
-        [
-            ("VoBo", ["Dato", "Valor"], datos),
-            ("Bajas", ["Usuario", "Nombre", "Rol a retirar", "Vista", "Comentario", "Decidió", "Fecha decisión"],
-             recert.BajasVoBo(v.VoBoId).Select(b => new object?[] { b.Usuario, b.Nombre, b.Rol, b.Vista, b.Comentario, b.DecididoPor, b.FechaDecision })),
-        ]);
+        var bajas = recert.BajasVoBo(v.VoBoId);
+        static string F(DateTime? f) => f?.ToString("yyyy-MM-dd HH:mm") ?? "—";
+        string Fila(string dato, string? valor) =>
+            $"<tr><td style=\"padding:4px 12px 4px 0;color:#5B6672;vertical-align:top\">{H(dato)}</td><td style=\"padding:4px 0\">{H(valor ?? "—")}</td></tr>";
+        var estatus = v.Estatus switch
+        {
+            EstatusVoBo.AUTORIZADA => "<strong style=\"color:#0B4F4B\">AUTORIZADO</strong>",
+            EstatusVoBo.RECHAZADA => "<strong style=\"color:#8A1C12\">RECHAZADO</strong>",
+            _ => $"<strong>{H(Etiqueta(v.Estatus).ToUpperInvariant())}</strong>",
+        };
+        var filasBajas = string.Concat(bajas.Select(b =>
+            $"<tr><td style=\"padding:4px 8px;border-bottom:1px solid #DDE1E6\">{H(b.Nombre)}<br><span style=\"color:#5B6672\">{H(b.Usuario)}</span></td>" +
+            $"<td style=\"padding:4px 8px;border-bottom:1px solid #DDE1E6;font-family:Consolas,monospace;font-size:12px\">{H(b.Rol)}<br>{H(b.Vista)}</td>" +
+            $"<td style=\"padding:4px 8px;border-bottom:1px solid #DDE1E6\">{H(b.Comentario ?? "")}</td>" +
+            $"<td style=\"padding:4px 8px;border-bottom:1px solid #DDE1E6\">{H(b.DecididoPor ?? "")}<br><span style=\"color:#5B6672\">{F(b.FechaDecision)}</span></td></tr>"));
+        var cuerpo =
+            "<p style=\"background:#FBE9C8;padding:8px 12px;border-radius:6px\">Constancia generada por el portal de Gobierno de Datos el " +
+            $"{reloj.GetLocalNow():yyyy-MM-dd HH:mm} a partir del registro de la solicitud. La aprobación al gerente la envía Power Automate.</p>" +
+            $"<p>Resultado del VoBo: {estatus}</p>" +
+            "<table style=\"border-collapse:collapse;margin:8px 0 16px\">" +
+            Fila("Evento", evento) + Fila("Macro área", v.MacroArea) + Fila("Id de la solicitud", v.VoBoId.ToString()) +
+            Fila("Gerente", $"{v.GerenteNombre} <{v.GerenteCorreo}>") + Fila("Bajas a autorizar", v.Bajas.ToString()) +
+            Fila("Solicitado por", $"{v.SolicitadoPor} · {F(v.FechaSolicitud)}") + Fila("Enviado al gerente (Power Automate)", F(v.FechaEnvio)) +
+            Fila("Respondió", v.RespondidoPor) + Fila("Fecha de respuesta", F(v.FechaRespuesta)) + Fila("Comentario del gerente", v.Comentario) +
+            (v.MotivoCancelacion is null ? "" : Fila("Motivo de cancelación", v.MotivoCancelacion)) +
+            "</table>" +
+            $"<p><strong>Bajas que se pidió autorizar ({bajas.Count:N0})</strong></p>" +
+            "<table style=\"border-collapse:collapse\"><thead><tr>" +
+            "<th style=\"padding:4px 8px;text-align:left;border-bottom:2px solid #17212B\">Usuario</th>" +
+            "<th style=\"padding:4px 8px;text-align:left;border-bottom:2px solid #17212B\">Rol a retirar · vista</th>" +
+            "<th style=\"padding:4px 8px;text-align:left;border-bottom:2px solid #17212B\">Comentario</th>" +
+            "<th style=\"padding:4px 8px;text-align:left;border-bottom:2px solid #17212B\">Decidió</th></tr></thead>" +
+            $"<tbody>{filasBajas}</tbody></table>";
+        var remitente = opciones.Value.Correo.Remitente ?? "gobierno.datos@mabe.com.mx";
+        using var correo = CorreoEml.Construir(new MensajeCorreo(v.GerenteCorreo,
+            $"Constancia de VoBo · {v.MacroArea} · evento {evento} · {Etiqueta(v.Estatus)}", Plantilla("VoBo de bajas del gerente", cuerpo)), remitente);
+        return CorreoEml.Generar(correo);
     }
 
     // Todos los correos enviados del evento en un .zip, más el resumen en Excel.

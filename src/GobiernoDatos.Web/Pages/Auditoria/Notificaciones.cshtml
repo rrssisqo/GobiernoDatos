@@ -15,7 +15,7 @@
         @if (Model.Evento is not null)
         {
             <a class="btn btn-primario" asp-page-handler="Evidencia" asp-route-evento="@Model.Evento"
-               title="Un .zip con el resumen en Excel, los correos enviados (.eml) y las constancias de VoBo del gerente">Descargar evidencia</a>
+               title="Un .zip con el resumen en Excel, los correos enviados (.eml) y las constancias de VoBo del gerente (.eml)">Descargar evidencia</a>
         }
     </div>
 </header>
@@ -68,7 +68,7 @@
                             <td>@if (m.VoBo is { } vb)
                                 {
                                     <span class="badge @(vb.Estatus == EstatusVoBo.AUTORIZADA ? "badge-ok" : vb.Estatus == EstatusVoBo.RECHAZADA ? "badge-error" : "badge-aviso")">@NotificacionesModel.Etiqueta(vb.Estatus)</span>
-                                    <a asp-page-handler="VoBo" asp-route-id="@vb.VoBoId" asp-route-evento="@Model.Evento" style="display:block">Descargar constancia</a>
+                                    <a asp-page-handler="VoBo" asp-route-id="@vb.VoBoId" asp-route-evento="@Model.Evento" style="display:block">Descargar constancia (.eml)</a>
                                 }
                                 else { <span class="sutil">—</span> }</td>
                         </tr>
@@ -82,7 +82,7 @@
 <section class="panel" aria-labelledby="h-vobo" id="vobo-gerente">
     <div class="panel-cab">
         <h2 id="h-vobo">VoBo del gerente</h2>
-        <span class="sutil">Solicitudes enviadas por Power Automate al gerente y su respuesta; la constancia incluye las bajas que se pidió autorizar</span>
+        <span class="sutil">Solicitudes enviadas por Power Automate al gerente y su respuesta; la constancia es un correo (.eml) con las bajas que se pidió autorizar</span>
     </div>
     @if (Model.VoBos.Count == 0)
     {
@@ -107,7 +107,7 @@
                                 @if (v.FechaRespuesta is { } fr) { <span class="secundario">@v.RespondidoPor · @fr.ToString("yyyy-MM-dd HH:mm")@(v.Comentario is null ? "" : " · " + v.Comentario)</span> }
                                 @if (v.MotivoCancelacion is not null) { <span class="secundario">@v.MotivoCancelacion</span> }
                             </td>
-                            <td><a asp-page-handler="VoBo" asp-route-id="@v.VoBoId" asp-route-evento="@Model.Evento">Descargar constancia (.xlsx)</a></td>
+                            <td><a asp-page-handler="VoBo" asp-route-id="@v.VoBoId" asp-route-evento="@Model.Evento">Descargar constancia (.eml)</a></td>
                         </tr>
                     }
                 </tbody>

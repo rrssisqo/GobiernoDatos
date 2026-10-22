@@ -16,6 +16,17 @@ public class BajasVoBoPortalTests(PortalTests.Fabrica fabrica) : IClassFixture<P
         WebUtility.HtmlDecode(Regex.Match(Regex.Matches(html, "<form[^>]*>").Select(m => m.Value).First(f => f.Contains("handler=" + handler)),
                                           "action=\"([^\"]*)\"").Groups[1].Value);
 
+    // Cuerpo HTML de un .eml (base64 o quoted-printable).
+    private static string CuerpoEml(string eml)
+    {
+        var m = Regex.Match(eml, @"Content-Transfer-Encoding: (base64|quoted-printable)\r\n(?:[^\r\n]+\r\n)*\r\n(?<cuerpo>.*?)(\r\n\r\n|\r\n--|$)", RegexOptions.Singleline);
+        var texto = m.Groups["cuerpo"].Value;
+        if (m.Groups[1].Value == "base64") return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(Regex.Replace(texto, @"\s", "")));
+        var qp = Regex.Replace(texto.Replace("=\r\n", ""), "(=[0-9A-F]{2})+", g => System.Text.Encoding.UTF8.GetString(
+            g.Value.Split('=', StringSplitOptions.RemoveEmptyEntries).Select(h => Convert.ToByte(h, 16)).ToArray()));
+        return qp;
+    }
+
     [Fact]
     public async Task Gerente_vobo_y_ticket_con_filtro_por_macro_area()
     {
@@ -63,13 +74,17 @@ public class BajasVoBoPortalTests(PortalTests.Fabrica fabrica) : IClassFixture<P
         Assert.Contains("Autorizado", filaVobo);
         Assert.Contains("gerenteti@ejemplo.local", filaVobo);
         var constancia = await client.GetAsync(Regex.Match(filaVobo, "href=\"([^\"]*handler=VoBo[^\"]*)\"").Groups[1].Value);
-        using (var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(await constancia.Content.ReadAsByteArrayAsync())))
-        {
-            var datos = libro.Worksheet("VoBo");
-            Assert.Contains(datos.RowsUsed(), r => r.Cell(1).GetString() == "Estatus" && r.Cell(2).GetString() == "Autorizado");
-            Assert.Contains(datos.RowsUsed(), r => r.Cell(1).GetString() == "Respondió" && r.Cell(2).GetString() == "gerenteti@ejemplo.local");
-            Assert.Equal((baja.UsuarioCodigo, baja.Rol), (libro.Worksheet("Bajas").Cell(2, 1).GetString(), libro.Worksheet("Bajas").Cell(2, 3).GetString()));
-        }
+        Assert.Equal("message/rfc822", constancia.Content.Headers.ContentType!.MediaType);
+        var disposicion = constancia.Content.Headers.ContentDisposition!;
+        Assert.EndsWith(".eml", disposicion.FileNameStar ?? disposicion.FileName!.Trim('"'));
+        var eml = await constancia.Content.ReadAsStringAsync();
+        Assert.Contains("To: gerenteti@ejemplo.local", eml);
+        var cuerpo = WebUtility.HtmlDecode(CuerpoEml(eml));
+        Assert.Contains("Constancia generada por el portal", cuerpo);
+        Assert.Contains("AUTORIZADO", cuerpo);
+        Assert.Contains("gerenteti@ejemplo.local", cuerpo);
+        Assert.Contains(baja.UsuarioCodigo, cuerpo);
+        Assert.Contains(baja.Rol, cuerpo);
         Assert.Contains("Por asignar a infraestructura", WebUtility.HtmlDecode(html));
         Assert.DoesNotContain("handler=Ejecutar", html);
 
