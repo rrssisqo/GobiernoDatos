@@ -49,6 +49,10 @@ public sealed record AsignacionInfra(long AsignacionId, int EventoId, int MacroA
                                      string ResponsableCorreo, string Cambio, int Bajas, string AsignadoPor, DateTime Fecha,
                                      bool Notificado, string? Error);
 
+// Correo con el que el responsable de infraestructura avisa que terminó de retirar los roles de una macro área (migración 019).
+public sealed record CierreInfra(long CierreId, int EventoId, int MacroAreaId, string MacroArea, string NombreArchivo, int Tamano,
+                                 string? Comentario, string SubidoPor, DateTime Fecha);
+
 // Bajas de una macro área en el evento, con su gerente, su última solicitud de VoBo y su asignación a infraestructura.
 public sealed record BajasMacroArea(int MacroAreaId, string MacroArea, int Bajas, int Ejecutadas, int PorDecidir,
                                     GerenteVoBo? Gerente, VoBoGerente? VoBo, AsignacionInfra? Infra = null)
@@ -129,6 +133,10 @@ public interface IRecertificacionService
     // con el número de cambio. La notificación la envía NotificacionesInfra.
     AsignacionInfra AsignarInfraestructura(int eventoId, int macroAreaId, string cambio, string usuario);
     void RegistrarNotificacionInfra(long asignacionId, bool enviado, string? error);
+    // Evidencia de cierre: el correo (.eml o .msg) con el que infraestructura avisa que terminó. Se conservan todos los que se suban.
+    CierreInfra SubirCierreInfra(int eventoId, int macroAreaId, string nombreArchivo, byte[] contenido, string? comentario, string usuario);
+    IReadOnlyList<CierreInfra> CierresInfra(int eventoId);
+    (string NombreArchivo, byte[] Contenido)? ArchivoCierreInfra(long cierreId);
     IReadOnlyList<CertificadoresMacroArea> Certificadores();
     // El certificador se identifica por su usuario de red (DOMINIO\usuario); el nombre sale del directorio.
     void AsignarCertificador(int macroAreaId, string usuarioRed, string tipo);
@@ -626,6 +634,36 @@ public sealed class RecertificacionService(GobiernoStore s, IDirectorioUsuarios 
             var i = s.AsignacionesInfra.FindIndex(a => a.AsignacionId == asignacionId);
             if (i >= 0) s.AsignacionesInfra[i] = s.AsignacionesInfra[i] with { Notificado = enviado, Error = error };
         }
+    }
+
+    public CierreInfra SubirCierreInfra(int eventoId, int macroAreaId, string nombreArchivo, byte[] contenido, string? comentario, string usuario)
+    {
+        nombreArchivo = ReglasRecertificacion.ArchivoCierreInfra(nombreArchivo, contenido.Length);
+        comentario = ReglasRecertificacion.ComentarioCierreInfra(comentario);
+        lock (s.Sync)
+        {
+            if (Evento(eventoId).Estatus == EstatusEvento.BORRADOR) throw new DomainException("El evento todavía no está abierto.");
+            var macro = s.MacroAreas.FirstOrDefault(m => m.MacroAreaId == macroAreaId) ?? throw new DomainException("La macro área no existe.");
+            var bajas = Vigentes(eventoId).Where(x => x.Acceso.MacroAreaId == macroAreaId && x.Decision?.Decision == Decision.BAJA).ToList();
+            ReglasRecertificacion.ValidarCierreInfra(bajas.Count, bajas.Count(x => !s.BajasEjecutadas.Any(b => b.AccesoId == x.Acceso.AccesoId)));
+            var c = new CierreInfra(s.NuevoId(), eventoId, macroAreaId, macro.Nombre, nombreArchivo, contenido.Length, comentario, usuario, s.Ahora);
+            s.CierresInfra.Add(c);
+            s.ArchivosCierreInfra[c.CierreId] = contenido;
+            return c;
+        }
+    }
+
+    public IReadOnlyList<CierreInfra> CierresInfra(int eventoId)
+    {
+        lock (s.Sync)
+            return s.CierresInfra.Where(c => c.EventoId == eventoId).OrderBy(c => c.MacroArea).ThenByDescending(c => c.CierreId).ToList();
+    }
+
+    public (string NombreArchivo, byte[] Contenido)? ArchivoCierreInfra(long cierreId)
+    {
+        lock (s.Sync)
+            return s.CierresInfra.FirstOrDefault(c => c.CierreId == cierreId) is { } c && s.ArchivosCierreInfra.TryGetValue(cierreId, out var a)
+                ? (c.NombreArchivo, a) : null;
     }
 
     public IReadOnlyList<VoBoGerente> VoBos(int eventoId)

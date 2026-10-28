@@ -652,6 +652,58 @@ public sealed class SqlRecertificacionService(SqlConexion db, IDirectorioUsuario
                   new { asignacionId, enviado, error });
     }
 
+    // ---- Correo de cierre de infraestructura (migración 019) ----
+
+    private sealed record CierreRow(long cierre_id, int evento_id, int macro_area_id, string macro_area, string nombre_archivo, int tamano,
+                                    string? comentario, string subido_por, DateTime fecha_subida);
+    private sealed record ArchivoCierreRow(string nombre_archivo, byte[] contenido);
+
+    public CierreInfra SubirCierreInfra(int eventoId, int macroAreaId, string nombreArchivo, byte[] contenido, string? comentario, string usuario)
+    {
+        nombreArchivo = ReglasRecertificacion.ArchivoCierreInfra(nombreArchivo, contenido.Length);
+        comentario = ReglasRecertificacion.ComentarioCierreInfra(comentario);
+        using var c = db.Abrir();
+        var estatus = c.ExecuteScalar<string?>("SELECT estatus FROM gd.recert_evento WHERE evento_id = @eventoId", new { eventoId })
+            ?? throw new DomainException("El evento no existe.");
+        if (estatus == "BORRADOR") throw new DomainException("El evento todavía no está abierto.");
+        var (bajas, sinTicket) = c.QuerySingle<(int, int)>("""
+            SELECT COUNT(*), ISNULL(SUM(CASE WHEN ticket IS NULL THEN 1 ELSE 0 END), 0)
+            FROM gd.vw_recert_evidencia
+            WHERE evento_id = @eventoId AND macro_area_id = @macroAreaId AND decision = 'BAJA'
+            """, new { eventoId, macroAreaId });
+        ReglasRecertificacion.ValidarCierreInfra(bajas, sinTicket);
+        var id = c.ExecuteScalar<long?>("""
+            INSERT INTO gd.recert_cierre_infra (evento_id, macro_area_id, nombre_archivo, contenido, tamano, comentario, subido_por)
+            OUTPUT inserted.cierre_id
+            SELECT @eventoId, macro_area_id, @nombreArchivo, @contenido, @tamano, @comentario, @usuario
+            FROM gd.macro_area WHERE macro_area_id = @macroAreaId
+            """, new { eventoId, macroAreaId, nombreArchivo, contenido, tamano = contenido.Length, comentario, usuario })
+            ?? throw new DomainException("La macro área no existe.");
+        return CierresInfra(eventoId).Single(x => x.CierreId == id);
+    }
+
+    public IReadOnlyList<CierreInfra> CierresInfra(int eventoId)
+    {
+        using var c = db.Abrir();
+        return c.Query<CierreRow>("""
+            SELECT ci.cierre_id, ci.evento_id, ci.macro_area_id, m.nombre AS macro_area, ci.nombre_archivo, ci.tamano, ci.comentario,
+                   ci.subido_por, ci.fecha_subida
+            FROM gd.recert_cierre_infra AS ci JOIN gd.macro_area AS m ON m.macro_area_id = ci.macro_area_id
+            WHERE ci.evento_id = @eventoId
+            ORDER BY m.nombre, ci.cierre_id DESC
+            """, new { eventoId })
+            .Select(r => new CierreInfra(r.cierre_id, r.evento_id, r.macro_area_id, r.macro_area, r.nombre_archivo, r.tamano, r.comentario,
+                                         r.subido_por, r.fecha_subida)).ToList();
+    }
+
+    public (string NombreArchivo, byte[] Contenido)? ArchivoCierreInfra(long cierreId)
+    {
+        using var c = db.Abrir();
+        var r = c.QuerySingleOrDefault<ArchivoCierreRow>("SELECT nombre_archivo, contenido FROM gd.recert_cierre_infra WHERE cierre_id = @cierreId",
+                                                         new { cierreId });
+        return r is null ? null : (r.nombre_archivo, r.contenido);
+    }
+
     public IReadOnlyList<VoBoGerente> VoBos(int eventoId)
     {
         using var c = db.Abrir();

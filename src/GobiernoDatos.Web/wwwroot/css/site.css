@@ -302,3 +302,8 @@ section[id] { scroll-margin-top: 16px; }
 
 /* Auditoría · Evidencia de la respuesta: el comentario puede ser largo. */
 .tabla-auditoria td.comentario { white-space: normal; min-width: 220px; }
+
+/* Auditoría · Notificaciones: subir el correo de cierre de infraestructura desde la fila de la macro área. */
+.subir-cierre { margin-top: 4px; }
+.subir-cierre summary { cursor: pointer; color: var(--primario); font-size: 13px; }
+.subir-cierre form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; min-width: 240px; }

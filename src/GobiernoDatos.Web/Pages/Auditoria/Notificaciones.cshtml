@@ -9,13 +9,13 @@
 <header class="encabezado">
     <div class="titulo">
         <h1>Auditoría</h1>
-        <p>Solicitud de validación a los responsables de cada macro área y VoBo del gerente: a quién se notificó y la evidencia</p>
+        <p>Solicitud de validación a los responsables de cada macro área, VoBo del gerente y cierre de infraestructura: a quién se notificó y la evidencia</p>
     </div>
     <div class="acciones">
         @if (Model.Evento is not null)
         {
             <a class="btn btn-primario" asp-page-handler="Evidencia" asp-route-evento="@Model.Evento"
-               title="Un .zip con el resumen en Excel, los correos enviados (.eml) y las constancias de VoBo del gerente (.eml)">Descargar evidencia</a>
+               title="Un .zip con el resumen en Excel, los correos enviados (.eml), las constancias de VoBo del gerente (.eml) y los correos de cierre de infraestructura">Descargar evidencia</a>
         }
     </div>
 </header>
@@ -45,7 +45,7 @@
         <div class="panel-cuerpo"><span class="sutil">@notificadas de @Model.PorMacro.Count macro áreas notificadas</span></div>
         <div class="tabla-scroll">
             <table class="tabla" id="tabla-notificacion-macro">
-                <thead><tr><th>Macro área</th><th>Responsables</th><th>Notificado</th><th class="derecha">Envíos</th><th>Último envío</th><th>Correo</th><th class="derecha">Pendientes</th><th>Certificación</th><th>VoBo gerente</th></tr></thead>
+                <thead><tr><th>Macro área</th><th>Responsables</th><th>Notificado</th><th class="derecha">Envíos</th><th>Último envío</th><th>Correo</th><th class="derecha">Pendientes</th><th>Certificación</th><th>VoBo gerente</th>@if (Model.MostrarCierre) { <th>Cierre infraestructura</th> }</tr></thead>
                 <tbody>
                     @foreach (var m in Model.PorMacro)
                     {
@@ -68,6 +68,64 @@
                                     <a asp-page-handler="VoBo" asp-route-id="@vb.VoBoId" asp-route-evento="@Model.Evento" style="display:block">Descargar constancia (.eml)</a>
                                 }
                                 else { <span class="sutil">—</span> }</td>
+                            @if (Model.MostrarCierre)
+                            {
+                            <td>
+                                @if (m.UltimoCierre is { } ci)
+                                {
+                                    <span class="badge badge-ok">Recibido</span>
+                                    <a asp-page-handler="CierreInfra" asp-route-id="@ci.CierreId" style="display:block" title="@ci.NombreArchivo">Descargar correo</a>
+                                }
+                                else if (!m.ListoCierre)
+                                {
+                                    <span class="sutil">@(m.Bajas == 0 ? "Sin bajas" : $"Falta ticket ({m.ConTicket} de {m.Bajas})")</span>
+                                }
+                                @if (m.ListoCierre)
+                                {
+                                <details class="subir-cierre">
+                                    <summary>@(m.UltimoCierre is null ? "Subir correo" : "Subir otro")</summary>
+                                    <form method="post" asp-page-handler="CierreInfra" asp-route-evento="@Model.Evento" enctype="multipart/form-data">
+                                        <input type="hidden" name="macroAreaId" value="@m.MacroAreaId" />
+                                        <input type="file" name="archivo" accept=".eml,.msg" required aria-label="Correo de cierre de @m.MacroArea" />
+                                        <input type="text" name="comentario" maxlength="500" placeholder="Comentario (opcional)" aria-label="Comentario" />
+                                        <button class="btn btn-chico btn-primario" type="submit">Subir</button>
+                                    </form>
+                                </details>
+                                }
+                            </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="panel" aria-labelledby="h-cierre" id="cierre-infra">
+    <div class="panel-cab">
+        <h2 id="h-cierre">Cierre de infraestructura</h2>
+        <span class="sutil">Correo con el que el responsable de infraestructura confirma que retiró los roles de cada macro área; se sube cuando todas sus bajas tienen ticket (.eml o .msg de Outlook, máximo 10 MB)</span>
+    </div>
+    @if (Model.Cierres.Count == 0)
+    {
+        <div class="vacio">No se ha subido ningún correo de cierre en este evento. Cuando todas las bajas de una macro área tengan ticket, aparece la columna «Cierre infraestructura» en la tabla por macro área para subirlo.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-cierre-infra">
+                <thead><tr><th>Macro área</th><th>Correo</th><th>Comentario</th><th>Subió</th><th>Fecha</th><th>Evidencia</th></tr></thead>
+                <tbody>
+                    @foreach (var c in Model.Cierres)
+                    {
+                        <tr data-cierre="@c.CierreId">
+                            <td>@c.MacroArea</td>
+                            <td>@c.NombreArchivo<span class="secundario">@((c.Tamano / 1024.0).ToString("N0")) KB</span></td>
+                            <td>@Ui.Texto(c.Comentario, "—")</td>
+                            <td class="mono">@c.SubidoPor</td>
+                            <td class="mono">@c.Fecha.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td><a asp-page-handler="CierreInfra" asp-route-id="@c.CierreId">Descargar correo</a></td>
                         </tr>
                     }
                 </tbody>

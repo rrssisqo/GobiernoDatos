@@ -39,6 +39,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/014_recert_asignacion_infra.sql", "db/migrations/015_recert_responsable_infra_unico.sql",
                                         "db/migrations/016_recert_recordatorio_correo.sql",
                                         "db/migrations/017_regla_campos_frecuencia.sql", "db/migrations/018_recert_vobo_evidencia.sql",
+                                        "db/migrations/019_recert_cierre_infra.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -326,11 +327,22 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
         recert.RegistrarNotificacionInfra(asignacion.AsignacionId, true, null);
         Assert.Equal(("CHG-001", true), (Ti().Infra!.Cambio, Ti().Infra!.Notificado));
 
+        // El correo de cierre de infraestructura espera el ticket de todas las bajas.
+        Assert.Contains("tienen ticket", Assert.Throws<DomainException>(
+            () => recert.SubirCierreInfra(evento.EventoId, ti.MacroAreaId, "cierre.msg", [1], null, "admin")).Message);
+
         Assert.Equal(5, recert.CerrarEvento(evento.EventoId));                                   // otras macro áreas: pendientes reportados
         Assert.Throws<DomainException>(() => recert.Decidir(baja.AccesoId, Decision.CONTINUA, null, cert));
 
         Assert.Throws<DomainException>(() => recert.RegistrarEjecucion(baja.AccesoId, " ", null, "TI"));
         recert.RegistrarEjecucion(baja.AccesoId, "INC-001", null, "TI");
+
+        // Con todas las bajas con ticket: correo de cierre (.eml o .msg) como evidencia; se conservan todos.
+        Assert.Throws<DomainException>(() => recert.SubirCierreInfra(evento.EventoId, ti.MacroAreaId, "cierre.pdf", [1], null, "admin"));
+        var cierre = recert.SubirCierreInfra(evento.EventoId, ti.MacroAreaId, "cierre.msg", [1, 2, 3], " Listo ", "admin");
+        Assert.Equal(("TI", 3, "Listo"), (cierre.MacroArea, cierre.Tamano, cierre.Comentario));
+        Assert.Equal(new byte[] { 1, 2, 3 }, recert.ArchivoCierreInfra(cierre.CierreId)!.Value.Contenido);
+        Assert.Equal(cierre.CierreId, Assert.Single(recert.CierresInfra(evento.EventoId)).CierreId);
         var bajas = recert.Bajas(evento.EventoId)!;
         Assert.Equal(1, bajas.Ejecutadas);
         Assert.Contains(recert.Traza(baja.AccesoId), p => p.Titulo == "Decisión cambiada a Baja");

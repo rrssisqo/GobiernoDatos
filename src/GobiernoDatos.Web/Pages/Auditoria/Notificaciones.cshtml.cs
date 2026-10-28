@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using GobiernoDatos.Web.Data;
+using GobiernoDatos.Web.Domain;
 using GobiernoDatos.Web.Pages.Shared;
 using GobiernoDatos.Web.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -12,14 +13,19 @@ namespace GobiernoDatos.Web.Pages.Auditoria;
 // (recordatorios de Eventos) y el correo enviado en .eml (migración 016); y el VoBo del gerente (Power Automate) con su
 // constancia en correo (.eml) generada por el portal: solicitud, envío, respuesta y las bajas que se le pidió autorizar
 // (migración 018). El VoBo lo envía Power Automate, así que el portal no tiene el correo original: el .eml lo dice.
+// Al final, el correo con el que el responsable de infraestructura avisa que terminó, que sube el administrador cuando todas las
+// bajas de la macro área tienen ticket (migración 019).
 public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual usuario, IOptions<GobiernoDatosOptions> opciones,
                                  TimeProvider reloj) : PortalPageModel
 {
-    public sealed record FilaMacro(string MacroArea, IReadOnlyList<string> Responsables, int Pendientes, bool Confirmada,
-                                   IReadOnlyList<RecertRecordatorio> Envios, VoBoGerente? VoBo = null)
+    public sealed record FilaMacro(int MacroAreaId, string MacroArea, IReadOnlyList<string> Responsables, int Pendientes, bool Confirmada,
+                                   IReadOnlyList<RecertRecordatorio> Envios, VoBoGerente? VoBo, IReadOnlyList<CierreInfra> Cierres,
+                                   int Bajas, int ConTicket)
     {
+        public bool ListoCierre => Bajas > 0 && ConTicket == Bajas;
         public RecertRecordatorio? Ultimo => Envios.Where(e => e.Enviado).MaxBy(e => e.Fecha);
         public bool Notificado => Ultimo is not null;
+        public CierreInfra? UltimoCierre => Cierres.MaxBy(c => c.CierreId);
     }
 
     [BindProperty(SupportsGet = true)] public int? Evento { get; set; }
@@ -28,6 +34,9 @@ public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual 
     public IReadOnlyList<FilaMacro> PorMacro { get; private set; } = [];
     public IReadOnlyList<RecertRecordatorio> Envios { get; private set; } = [];
     public IReadOnlyList<VoBoGerente> VoBos { get; private set; } = [];
+    public IReadOnlyList<CierreInfra> Cierres { get; private set; } = [];
+    // La columna de cierre aparece cuando alguna macro área ya tiene ticket en todas sus bajas (o ya tiene correo).
+    public bool MostrarCierre => PorMacro.Any(m => m.ListoCierre || m.Cierres.Count > 0);
 
     public static string Etiqueta(EstatusVoBo e) => e switch
     {
@@ -59,6 +68,36 @@ public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual 
         if (v is null) return NotFound();
         return File(Constancia(v), "message/rfc822", NombreConstancia(v));
     }
+
+    // Correo de cierre de infraestructura, con su nombre original.
+    public IActionResult OnGetCierreInfra(long id)
+    {
+        if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
+        return recert.ArchivoCierreInfra(id) is { } a ? File(a.Contenido, TipoCorreo(a.NombreArchivo), a.NombreArchivo) : NotFound();
+    }
+
+    public async Task<IActionResult> OnPostCierreInfraAsync(int macroAreaId, IFormFile? archivo, string? comentario)
+    {
+        if (!usuario.TieneRol(RolesPortal.Administrador)) return SinPermiso();
+        var contenido = Array.Empty<byte>();
+        if (archivo is { Length: > 0 and <= ReglasRecertificacion.MaxCierreInfraBytes })
+        {
+            using var ms = new MemoryStream();
+            await archivo.CopyToAsync(ms);
+            contenido = ms.ToArray();
+        }
+        return Ejecutar(() =>
+        {
+            ReglasRecertificacion.ArchivoCierreInfra(archivo?.FileName, archivo?.Length ?? 0);
+            recert.SubirCierreInfra(Evento ?? 0, macroAreaId, archivo!.FileName, contenido, comentario, usuario.Login);
+        }, "Correo de cierre de infraestructura guardado como evidencia.", () => RedirectToPage(new { Evento }));
+    }
+
+    private static string TipoCorreo(string nombre) =>
+        nombre.EndsWith(".msg", StringComparison.OrdinalIgnoreCase) ? "application/vnd.ms-outlook" : "message/rfc822";
+
+    private static string NombreCierre(CierreInfra c) =>
+        $"{EscritorExcel.NombreArchivo(c.MacroArea)}_{c.Fecha:yyyyMMdd_HHmm}_{c.CierreId}{Path.GetExtension(c.NombreArchivo).ToLowerInvariant()}";
 
     private string NombreConstancia(VoBoGerente v) =>
         $"vobo_{EscritorExcel.NombreArchivo(v.MacroArea)}_{v.FechaSolicitud:yyyyMMdd_HHmm}_{v.VoBoId}.eml";
@@ -120,6 +159,9 @@ public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual 
                     Agregar(zip, $"correos/{e.Fecha:yyyyMMdd_HHmm}_{EscritorExcel.NombreArchivo(e.Certificador)}_{e.RecordatorioId}.eml", eml);
             foreach (var v in VoBos)
                 Agregar(zip, $"vobo_gerente/{NombreConstancia(v)}", Constancia(v));
+            foreach (var c in Cierres)
+                if (recert.ArchivoCierreInfra(c.CierreId) is { } a)
+                    Agregar(zip, $"cierre_infraestructura/{NombreCierre(c)}", a.Contenido);
         }
         return File(ms.ToArray(), "application/zip", $"evidencia_notificaciones_{evento}.zip");
     }
@@ -146,9 +188,14 @@ public class NotificacionesModel(IRecertificacionService recert, IUsuarioActual 
         if (Evento is not int id || recert.Tablero(id) is not { } t) return;
         Envios = recert.Recordatorios(id);
         VoBos = recert.VoBos(id);
-        PorMacro = t.MacroAreas.Select(m => new FilaMacro(m.MacroArea, m.Certificadores, m.Conteo.Pendientes, m.Confirmada,
+        Cierres = recert.CierresInfra(id);
+        var bajas = recert.Bajas(id)?.MacroAreas ?? [];
+        PorMacro = t.MacroAreas.Select(m => new FilaMacro(m.MacroAreaId, m.MacroArea, m.Certificadores, m.Conteo.Pendientes, m.Confirmada,
                 Envios.Where(e => e.MacroAreas.Split(", ").Contains(m.MacroArea)).ToList(),
-                VoBos.Where(v => v.MacroAreaId == m.MacroAreaId).MaxBy(v => v.VoBoId)))
+                VoBos.Where(v => v.MacroAreaId == m.MacroAreaId).MaxBy(v => v.VoBoId),
+                Cierres.Where(c => c.MacroAreaId == m.MacroAreaId).ToList(),
+                bajas.FirstOrDefault(b => b.MacroAreaId == m.MacroAreaId)?.Bajas ?? 0,
+                bajas.FirstOrDefault(b => b.MacroAreaId == m.MacroAreaId)?.Ejecutadas ?? 0))
             .OrderBy(m => m.MacroArea).ToList();
     }
 }

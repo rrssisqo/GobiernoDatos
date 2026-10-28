@@ -57,6 +57,36 @@ public static class ReglasRecertificacion
         return c;
     }
 
+    // Correo del responsable de infraestructura avisando que terminó (Auditoría): .eml o .msg de Outlook, máximo 10 MB.
+    public const int MaxCierreInfraBytes = 10 * 1024 * 1024;
+
+    public static string ArchivoCierreInfra(string? nombre, long tamano)
+    {
+        var n = Path.GetFileName((nombre ?? "").Trim());
+        if (tamano <= 0 || n.Length == 0) throw new DomainException("Selecciona el correo del responsable de infraestructura (.eml o .msg).");
+        var ext = Path.GetExtension(n).ToLowerInvariant();
+        if (ext is not (".eml" or ".msg"))
+            throw new DomainException("El correo debe ser .eml o .msg: en Outlook, arrástralo a una carpeta o usa Archivo → Guardar como.");
+        if (tamano > MaxCierreInfraBytes) throw new DomainException("El correo admite máximo 10 MB.");
+        return n.Length > 200 ? n[..(200 - ext.Length)] + ext : n;
+    }
+
+    // El cierre documenta que infraestructura terminó: solo cuando todas las bajas de la macro área tienen ticket.
+    public static void ValidarCierreInfra(int bajas, int sinTicket)
+    {
+        if (bajas == 0) throw new DomainException("La macro área no tiene bajas: no hay cierre de infraestructura que documentar.");
+        if (sinTicket > 0)
+            throw new DomainException($"El correo de cierre se sube cuando todas las bajas de la macro área tienen ticket (faltan {sinTicket}).");
+    }
+
+    public static string? ComentarioCierreInfra(string? comentario)
+    {
+        var c = comentario?.Trim();
+        if (string.IsNullOrEmpty(c)) return null;
+        if (c.Length > 500) throw new DomainException("El comentario admite máximo 500 caracteres.");
+        return c;
+    }
+
     public static string Etiqueta(Decision d) => d == Decision.CONTINUA ? "Continúa" : "Baja";
 
     public static string Etiqueta(EstatusEvento e) => e switch
