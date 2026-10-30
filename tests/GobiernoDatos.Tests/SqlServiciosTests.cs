@@ -39,7 +39,7 @@ public sealed class BaseSqlPrueba : IDisposable
                                         "db/migrations/014_recert_asignacion_infra.sql", "db/migrations/015_recert_responsable_infra_unico.sql",
                                         "db/migrations/016_recert_recordatorio_correo.sql",
                                         "db/migrations/017_regla_campos_frecuencia.sql", "db/migrations/018_recert_vobo_evidencia.sql",
-                                        "db/migrations/019_recert_cierre_infra.sql",
+                                        "db/migrations/019_recert_cierre_infra.sql", "db/migrations/020_acceso_informatica.sql",
                                         "db/seeds/002_recertificacion_muestra.sql" })
             foreach (var lote in Regex.Split(File.ReadAllText(Path.Combine(Raiz(), script)), @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
                 if (!string.IsNullOrWhiteSpace(lote)) c.Execute(lote, commandTimeout: 120);
@@ -382,6 +382,24 @@ public class SqlServiciosTests(BaseSqlPrueba bd)
     }
 
     // Directorio de prueba: solo existe MABENET\cprueba.
+    [SkippableFact]
+    public void Accesos_informatica_registro_change_y_eliminacion()
+    {
+        var svc = new SqlAccesosInformaticaService(Db(), new DirectorioDePrueba(), Options.Create(new GobiernoDatosOptions()));
+        var a = svc.Registrar("cprueba", "data steward", null, null, " Para glosarios ", "admin");
+        Assert.Equal(("Data Steward", new DateOnly(2026, 10, 2), "Para glosarios"), (a.Rol, a.FechaSolicitud, a.Comentario));
+        Assert.Null(a.Change);
+        Assert.Contains("ya tiene", Assert.Throws<DomainException>(() => svc.Registrar("cprueba", "Data Steward", null, null, null, "admin")).Message);
+        Assert.Throws<DomainException>(() => svc.Registrar("cprueba", "Data Viewer", null, null, null, "admin"));
+        Assert.Throws<DomainException>(() => svc.Registrar("cprueba", "Data Owner", new DateOnly(2026, 10, 3), null, null, "admin"));   // futura
+        Assert.Throws<DomainException>(() => svc.AsignarChange(a.AccesoId, " "));
+        svc.AsignarChange(a.AccesoId, " CHG-9 ");
+        Assert.Equal("CHG-9", Assert.Single(svc.Listar(), x => x.AccesoId == a.AccesoId).Change);
+        svc.Eliminar(a.AccesoId);
+        Assert.DoesNotContain(svc.Listar(), x => x.AccesoId == a.AccesoId);
+        Assert.Throws<DomainException>(() => svc.Eliminar(a.AccesoId));
+    }
+
     private sealed class DirectorioDePrueba : IDirectorioUsuarios
     {
         public string NombreVisible(string login) => BuscarNombre(login) ?? login;

@@ -50,6 +50,11 @@
         }
         @if (Usuario.TieneRol(RolesPortal.Administrador))
         {
+            <div class="seccion">Informatica</div>
+            <a asp-page="/Informatica/Accesos" aria-current="@Activo("informatica")">Accesos Informatica</a>
+        }
+        @if (Usuario.TieneRol(RolesPortal.Administrador))
+        {
             <div class="seccion">Auditoría</div>
             <a asp-page="/Auditoria/Index" aria-current="@Activo("auditoria")">Auditoría</a>
         }

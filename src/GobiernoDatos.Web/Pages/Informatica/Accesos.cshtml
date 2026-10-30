@@ -1,0 +1,112 @@
+@page
+@model GobiernoDatos.Web.Pages.Informatica.AccesosModel
+@{
+    ViewData["Title"] = "Accesos Informatica";
+    ViewData["Nav"] = "informatica";
+    var sinChange = Model.Todas.Count(a => a.Change is null);
+}
+
+<header class="encabezado">
+    <div class="titulo">
+        <h1>Accesos Informatica</h1>
+        <p>Solicitudes de rol Data Owner, Data Administrator y Data Steward · el Excel es para pedir el cambio a infraestructura</p>
+    </div>
+    <div class="acciones">
+        <a class="btn btn-primario" asp-page-handler="Exportar" asp-route-estado="@Model.Estado" asp-route-rolFiltro="@Model.RolFiltro"
+           title="Exporta las solicitudes que se ven con los filtros actuales">Exportar a Excel</a>
+    </div>
+</header>
+
+<section class="panel" aria-labelledby="h-nueva" id="nueva-solicitud">
+    <div class="panel-cab"><h2 id="h-nueva">Nueva solicitud</h2></div>
+    <form method="post" asp-page-handler="Registrar" asp-route-estado="@Model.Estado" asp-route-rolFiltro="@Model.RolFiltro"
+          class="panel-cuerpo form-fila" id="form-acceso-informatica">
+        <div class="buscador-usuario" style="flex:2 1 280px">
+            <label class="campo">Persona
+                <input type="text" name="usuarioRed" required maxlength="100" autocomplete="off" placeholder="Buscar en Entra ID: nombre, correo o MABENET\usuario"
+                       role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugerencias-usuario"
+                       data-buscar-usuario="@Url.Page("/Recertificacion/Eventos", "BuscarUsuarios")" />
+                <span class="ayuda seleccionado" aria-live="polite"></span>
+            </label>
+        </div>
+        <label class="campo" style="flex:1 1 200px">Rol
+            <select name="rol" required>
+                <option value="">Elige…</option>
+                @foreach (var r in ReglasAccesoInformatica.Roles) { <option value="@r">@r</option> }
+            </select>
+        </label>
+        <label class="campo" style="flex:0 1 180px">Fecha de solicitud
+            <input type="date" name="fechaSolicitud" value="@Model.Hoy.ToString("yyyy-MM-dd")" max="@Model.Hoy.ToString("yyyy-MM-dd")" required />
+        </label>
+        <label class="campo" style="flex:0 1 180px">Change <span class="sutil">(opcional)</span>
+            <input type="text" name="change" maxlength="60" />
+        </label>
+        <label class="campo" style="flex:2 1 260px">Comentario <span class="sutil">(opcional)</span>
+            <input type="text" name="comentario" maxlength="500" />
+        </label>
+        <button type="submit" class="btn btn-primario" style="flex:0 0 auto;align-self:flex-end">Registrar</button>
+    </form>
+</section>
+
+<section class="panel" aria-label="Solicitudes">
+    <div class="panel-cab">
+        <div class="chips" aria-label="Filtrar por change">
+            <a class="chip" asp-route-estado="" asp-route-rolFiltro="@Model.RolFiltro" aria-pressed="@(Model.Estado is null ? "true" : "false")">Todas <span class="cuenta">@Model.Todas.Count</span></a>
+            <a class="chip" asp-route-estado="SIN" asp-route-rolFiltro="@Model.RolFiltro" aria-pressed="@(Model.Estado == "SIN" ? "true" : "false")">Sin change <span class="cuenta">@sinChange</span></a>
+            <a class="chip" asp-route-estado="CON" asp-route-rolFiltro="@Model.RolFiltro" aria-pressed="@(Model.Estado == "CON" ? "true" : "false")">Con change <span class="cuenta">@(Model.Todas.Count - sinChange)</span></a>
+        </div>
+        <form method="get" class="compacto">
+            <input type="hidden" name="estado" value="@Model.Estado" />
+            <label class="campo en-linea">Rol
+                <select name="rolFiltro" data-autosubmit>
+                    <option value="">Todos</option>
+                    @foreach (var r in ReglasAccesoInformatica.Roles) { <option value="@r" selected="@(r == Model.RolFiltro)">@r</option> }
+                </select>
+            </label>
+        </form>
+        <label class="campo en-linea compacto">Buscar
+            <input type="search" placeholder="Nombre, usuario, change…" data-filtro-tabla="#tabla-accesos-informatica" style="width:220px" />
+        </label>
+    </div>
+
+    @if (Model.Filas.Count == 0)
+    {
+        <div class="vacio">No hay solicitudes en esta vista.</div>
+    }
+    else
+    {
+        <div class="tabla-scroll">
+            <table class="tabla" id="tabla-accesos-informatica">
+                <thead><tr><th>Persona</th><th>Correo</th><th>Rol</th><th>Fecha de solicitud</th><th>Change</th><th>Comentario</th><th>Registró</th><th><span class="oculto-visual">Acciones</span></th></tr></thead>
+                <tbody>
+                    @foreach (var a in Model.Filas)
+                    {
+                        <tr data-acceso="@a.AccesoId" data-texto="@a.Nombre @a.UsuarioRed @a.Correo @a.Rol @a.Change @a.Comentario">
+                            <td>@a.Nombre<span class="secundario mono">@a.UsuarioRed</span></td>
+                            <td class="mono">@Ui.Texto(a.Correo, "—")</td>
+                            <td><span class="badge badge-neutro">@a.Rol</span></td>
+                            <td class="mono">@a.FechaSolicitud.ToString("yyyy-MM-dd")</td>
+                            <td>
+                                <form method="post" asp-page-handler="Change" asp-route-estado="@Model.Estado" asp-route-rolFiltro="@Model.RolFiltro" class="form-fila compacto">
+                                    <input type="hidden" name="accesoId" value="@a.AccesoId" />
+                                    <input type="text" name="change" value="@a.Change" maxlength="60" required placeholder="Sin change" aria-label="Change de @a.Nombre" style="width:140px" />
+                                    <button type="submit" class="btn btn-chico">Guardar</button>
+                                </form>
+                            </td>
+                            <td>@Ui.Texto(a.Comentario, "—")</td>
+                            <td><span class="mono">@a.RegistradoPor</span><span class="secundario">@a.FechaRegistro.ToString("yyyy-MM-dd HH:mm")</span></td>
+                            <td class="acciones-fila nowrap">
+                                <form method="post" asp-page-handler="Eliminar" asp-route-estado="@Model.Estado" asp-route-rolFiltro="@Model.RolFiltro" class="inline"
+                                      data-confirmar="¿Eliminar la solicitud de @a.Rol de @a.Nombre?">
+                                    <input type="hidden" name="accesoId" value="@a.AccesoId" />
+                                    <button type="submit" class="btn btn-chico btn-peligro">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <div class="panel-pie"><span>Exporta a Excel las solicitudes «Sin change» para pedir el cambio a infraestructura; cuando te den el número, captúralo en su fila.</span></div>
+</section>

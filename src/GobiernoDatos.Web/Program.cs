@@ -34,6 +34,7 @@ if (fuente.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<IReglasService, SqlReglasService>();
     builder.Services.AddSingleton<IRecertificacionService, SqlRecertificacionService>();
     builder.Services.AddSingleton<ITareasService, SqlTareasService>();
+    builder.Services.AddSingleton<IAccesosInformaticaService, SqlAccesosInformaticaService>();
     builder.Services.AddSingleton<IFuenteExtracto, ExtractoHana>();
     builder.Services.AddSingleton(sp =>
     {
@@ -49,6 +50,7 @@ else if (fuente.Equals("Muestras", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<IReglasService, ReglasService>();
     builder.Services.AddSingleton<IRecertificacionService, RecertificacionService>();
     builder.Services.AddSingleton<ITareasService, TareasService>();
+    builder.Services.AddSingleton<IAccesosInformaticaService, AccesosInformaticaService>();
     builder.Services.AddSingleton<IFuenteExtracto, ExtractoMuestras>();
     builder.Services.AddSingleton(new FuenteDatos("Datos de muestra en memoria"));
 }
